@@ -1,0 +1,76 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Phase 5 — PostgreSQL, GORM & Migrations</title><link rel="stylesheet" href="../assets/course.css"></head><body data-root=".." data-phase="5"><div class="course-shell"><aside data-course-nav></aside><main class="course-main"><article class="article">
+<header class="phase-hero"><p class="eyebrow">Phase 5 · Durable state</p><h1>Move from memory to PostgreSQL without moving the business rules</h1><p class="hero-lede">Design a relational schema, manage it with migrations, implement the repository using GORM, and protect multi-step changes with transactions.</p><div class="hero-meta"><span class="pill">6–10 sessions</span><span class="pill">PostgreSQL</span><span class="pill">GORM</span><span class="pill">Migrations</span><span class="pill" data-phase-progress>Start when ready</span></div></header>
+<section class="callout"><h2>What you will build</h2><p>Assets and tasks survive restarts. List endpoints support filtering and cursor/page limits. Schema constraints reject impossible data, migrations reproduce the database, and integration tests prove the PostgreSQL adapter satisfies the same repository contract as memory.</p></section>
+<div class="diagram"><div class="flow"><div class="flow-node"><strong>Application</strong><br>TaskRepository</div><div class="flow-arrow">→</div><div class="flow-node"><strong>GORM adapter</strong><br>row mapping</div><div class="flow-arrow">→</div><div class="flow-node"><strong>PostgreSQL</strong><br>constraints + indexes</div><div class="flow-arrow">←</div><div class="flow-node"><strong>Migrations</strong><br>schema history</div></div><p class="diagram-caption">GORM executes SQL against a schema owned by migrations; it does not replace relational design.</p></div>
+
+<p class="section-label">Relational model</p><h2>The database is a second guardian of truth</h2><section class="lesson"><pre><code>CREATE TABLE assets (
+  id uuid PRIMARY KEY,
+  tenant_id uuid NOT NULL,
+  name text NOT NULL,
+  kind text NOT NULL CHECK (kind IN ('table','dashboard','pipeline')),
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE governance_tasks (
+  id uuid PRIMARY KEY,
+  tenant_id uuid NOT NULL,
+  asset_id uuid NOT NULL REFERENCES assets(id),
+  title text NOT NULL CHECK (length(title) BETWEEN 3 AND 120),
+  status text NOT NULL CHECK (status IN ('pending','in_progress','completed')),
+  created_at timestamptz NOT NULL,
+  updated_at timestamptz NOT NULL
+);
+CREATE INDEX idx_tasks_tenant_status ON governance_tasks(tenant_id, status);</code></pre><p>A primary key identifies a row. A foreign key protects relationships. <code>NOT NULL</code> distinguishes required facts. Checks block invalid categories. Indexes accelerate specific lookup patterns but add write/storage cost.</p><div class="callout warning"><strong>Tenant-safe uniqueness:</strong> decide whether a name is globally unique or unique inside a tenant. Most SaaS constraints should include <code>tenant_id</code>.</div></section>
+
+<p class="section-label">Migrations</p><h2>Schema is ordered history</h2><section class="lesson"><pre><code>migrations/
+├── 001_create_assets.up.sql
+├── 001_create_assets.down.sql
+├── 002_create_tasks.up.sql
+└── 002_create_tasks.down.sql</code></pre><p>A migration is a reviewed, repeatable state transition for the database. Apply migrations in CI/deployment, not by silently running ORM auto-migration at application startup. Prefer expand/contract for breaking changes: add compatible schema, deploy code using it, backfill, then remove old schema later.</p><details class="deep-dive"><summary>Deep dive: safe column rename</summary><div><ol><li>Add the new column.</li><li>Deploy code that writes both old and new.</li><li>Backfill existing rows.</li><li>Deploy code reading only new.</li><li>Remove old after every instance is compatible.</li></ol></div></details></section>
+
+<p class="section-label">GORM mapping</p><h2>ORM convenience does not replace SQL understanding</h2><section class="lesson"><pre><code>type taskRow struct {
+    ID        uuid.UUID `gorm:"type:uuid;primaryKey"`
+    TenantID  uuid.UUID `gorm:"type:uuid;not null;index:idx_tasks_tenant_status"`
+    AssetID   uuid.UUID `gorm:"type:uuid;not null"`
+    Title     string    `gorm:"not null"`
+    Status    string    `gorm:"not null;index:idx_tasks_tenant_status"`
+    CreatedAt time.Time `gorm:"not null"`
+    UpdatedAt time.Time `gorm:"not null"`
+}
+
+func (taskRow) TableName() string { return "governance_tasks" }</code></pre><p>Keep database row types inside the adapter and map them to domain types. This prevents GORM tags, nullable wrappers, and association behavior from leaking inward.</p><pre><code>func (s *TaskStore) Find(ctx context.Context, tenantID, id string) (*task.Task, error) {
+    var row taskRow
+    err := s.db.WithContext(ctx).
+        Where("tenant_id = ? AND id = ?", tenantID, id).
+        First(&amp;row).Error
+    if errors.Is(err, gorm.ErrRecordNotFound) { return nil, task.ErrNotFound }
+    if err != nil { return nil, fmt.Errorf("find task: %w", err) }
+    return toDomain(row), nil
+}</code></pre><p>Always attach the request context. Always scope tenant-owned queries. Translate adapter errors into domain/application categories.</p></section>
+
+<p class="section-label">Transactions</p><h2>All or nothing for one invariant</h2><section class="lesson"><pre><code>err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+    var row taskRow
+    if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+        Where("tenant_id = ? AND id = ?", tenantID, id).First(&amp;row).Error; err != nil {
+        return err
+    }
+    domain := toDomain(row)
+    if err := domain.Complete(); err != nil { return err }
+    return tx.Model(&amp;row).Updates(map[string]any{
+        "status": domain.Status, "updated_at": clock.Now(),
+    }).Error
+})</code></pre><p>A transaction groups database statements atomically. A row lock prevents two transactions from simultaneously validating the same old state. Keep transactions short; do not call slow external services while locks are held.</p></section>
+
+<p class="section-label">Queries</p><h2>Pagination and indexes are one design decision</h2><section class="lesson"><pre><code>query := db.WithContext(ctx).Where("tenant_id = ?", tenantID)
+if filter.Status != "" { query = query.Where("status = ?", filter.Status) }
+if filter.After != nil {
+    query = query.Where("(created_at, id) &lt; (?, ?)", filter.After.Time, filter.After.ID)
+}
+err := query.Order("created_at DESC, id DESC").Limit(limit + 1).Find(&amp;rows).Error</code></pre><p>Cursor pagination remains stable as rows are inserted. Use a deterministic tiebreaker such as ID. Cap page size on the server. Create indexes that match tenant filter plus ordering/filter fields, then inspect query plans when performance matters.</p></section>
+
+<p class="section-label">Connections and nulls</p><h2>Production details begin here</h2><section class="lesson"><ul><li>Configure a bounded connection pool; each app instance multiplies total connections.</li><li>Use <code>timestamptz</code> and store instants in UTC.</li><li>Represent optional database values explicitly (<code>*string</code> or <code>sql.NullString</code>), then map to domain meaning.</li><li>Use JSONB for genuinely flexible documents, not as an escape from relational design.</li><li>Log slow operations with context but never secrets or full sensitive payloads.</li></ul></section>
+
+<section class="lab"><h2>Build sequence</h2><ol><li>Draw entities and relationships before writing GORM structs.</li><li>Write up/down migrations and apply to a clean database.</li><li>Create private row models and mapping functions.</li><li>Implement repository methods with tenant predicates and context.</li><li>Add transaction-protected task transitions.</li><li>Add filter + bounded pagination.</li><li>Run adapter integration tests against PostgreSQL.</li><li>Restart the service and prove state remains.</li></ol></section>
+<section class="quiz"><h2>Knowledge check</h2><p><strong>1.</strong> Why keep both domain validation and database constraints?</p><details class="answer"><summary>Show answer</summary><div>Domain checks give meaningful behavior before writes; constraints protect truth against bugs, concurrency, scripts, and other writers.</div></details><p><strong>2.</strong> Why not make network calls inside a transaction?</p><details class="answer"><summary>Show answer</summary><div>They prolong locks and increase contention/failure uncertainty. Persist an outbox record inside the transaction and publish later (Phase 9).</div></details><p><strong>3.</strong> What must every tenant-owned query include?</p><details class="answer"><summary>Show answer</summary><div>A trusted tenant predicate, ideally reinforced by repository APIs and later database policies—not a tenant supplied casually by the request body.</div></details></section>
+<section class="readiness"><h2>Phase 5 readiness gate</h2><div class="checklist"><label class="check-item"><input type="checkbox" data-check="p5-1"><span>Migrations create a clean database with keys, constraints, and purposeful indexes.</span></label><label class="check-item"><input type="checkbox" data-check="p5-2"><span>GORM row models map to domain models without leaking inward.</span></label><label class="check-item"><input type="checkbox" data-check="p5-3"><span>Every query carries context and trusted tenant scope.</span></label><label class="check-item"><input type="checkbox" data-check="p5-4"><span>Multi-step transitions are transaction-safe and concurrency-aware.</span></label><label class="check-item"><input type="checkbox" data-check="p5-5"><span>Integration tests prove persistence, filters, pagination, and constraint failures.</span></label></div><p>Next: <span class="command">I'm done with Phase 5, start Phase 6 learning</span></p></section>
+<footer class="phase-footer"><a class="phase-link" href="../phase-04-interfaces/index.html">← Phase 4</a><a class="phase-link next" href="../phase-06-auth-tenancy/index.html">Phase 6: Auth & tenancy →</a></footer></article></main></div><script src="../assets/course.js"></script></body></html>

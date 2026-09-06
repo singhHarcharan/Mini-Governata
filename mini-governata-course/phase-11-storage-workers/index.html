@@ -1,0 +1,45 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Phase 11 — Object Storage, Cache & Workers</title><link rel="stylesheet" href="../assets/course.css"></head><body data-root=".." data-phase="11"><div class="course-shell"><aside data-course-nav></aside><main class="course-main"><article class="article">
+<header class="phase-hero"><p class="eyebrow">Phase 11 · Supporting infrastructure</p><h1>Put each kind of data in the right place</h1><p class="hero-lede">Store evidence files in MinIO-compatible object storage, cache safe reads in Redis/Valkey, and process expensive work with bounded, observable workers.</p><div class="hero-meta"><span class="pill">6–10 sessions</span><span class="pill">S3/MinIO</span><span class="pill">Redis/Valkey</span><span class="pill">Background work</span><span class="pill" data-phase-progress>Start when ready</span></div></header>
+<section class="callout"><h2>What you will build</h2><p>A user uploads evidence for a governance task. PostgreSQL stores metadata and relationships; object storage holds bytes; a worker checksums/scans/processes the object; Redis caches safe asset summaries. Failures leave recoverable status, not dangling mystery.</p></section>
+
+<p class="section-label">Storage selection</p><h2>Use different systems for different guarantees</h2><section class="lesson"><table><thead><tr><th>System</th><th>Best for</th><th>Not the source for</th></tr></thead><tbody><tr><td>PostgreSQL</td><td>relationships, transactions, authoritative metadata</td><td>large binary payloads</td></tr><tr><td>Object storage</td><td>large immutable/streamed files</td><td>relational queries and workflow state</td></tr><tr><td>Redis/Valkey</td><td>ephemeral cache, rate counters, short coordination</td><td>irreplaceable business truth</td></tr></tbody></table></section>
+
+<p class="section-label">Object lifecycle</p><h2>Metadata and bytes form one business object</h2><section class="lesson"><div class="diagram"><div class="flow"><div class="flow-node"><strong>Create upload</strong><br>pending metadata</div><div class="flow-arrow">→</div><div class="flow-node"><strong>Stream bytes</strong><br>object store</div><div class="flow-arrow">→</div><div class="flow-node"><strong>Verify</strong><br>size/checksum/type</div><div class="flow-arrow">→</div><div class="flow-node"><strong>Mark ready</strong><br>metadata</div><div class="flow-arrow">→</div><div class="flow-node"><strong>Process</strong><br>worker</div></div></div><pre><code>type Evidence struct {
+    ID, TenantID, TaskID string
+    ObjectKey            string
+    FileName, MediaType  string
+    SizeBytes            int64
+    SHA256               string
+    Status               string // pending | ready | failed | deleted
+}</code></pre><p>Use unguessable, tenant-prefixed object keys such as <code>tenants/{tenant}/evidence/{id}</code>; do not trust filenames as keys. Stream rather than loading entire files into memory. Enforce size and allowed content types, but do not trust declared MIME type alone.</p></section>
+
+<p class="section-label">Presigned URLs</p><h2>Delegate bytes, keep authorization</h2><section class="lesson"><p>A presigned URL grants temporary permission for one object operation. The API must authenticate the user, authorize task access, choose the object key and limits, and issue a short expiry. The browser uploads directly, then tells the API to finalize; the API verifies object metadata before marking it ready.</p><div class="callout warning">Treat a presigned URL as a short-lived bearer credential. Never log it or issue broad bucket access.</div></section>
+
+<p class="section-label">Cache-aside</p><h2>Cache is an optimization with a stale-data policy</h2><section class="lesson"><pre><code>func (s *AssetService) Get(ctx context.Context, tenantID, id string) (*Asset, error) {
+    key := "asset:v1:" + tenantID + ":" + id
+    if asset, ok := s.cache.Get(ctx, key); ok { return asset, nil }
+    asset, err := s.repo.Find(ctx, tenantID, id)
+    if err != nil { return nil, err }
+    _ = s.cache.Set(ctx, key, asset, 5*time.Minute) // cache failure is non-fatal here
+    return asset, nil
+}</code></pre><p>On write, commit database truth, then delete/update the cache. TTL limits staleness; versioned key prefixes simplify format changes. Include tenant identity in keys. Do not cache permission decisions carelessly—revocation latency is a security property.</p><details class="deep-dive"><summary>Deep dive: cache stampede</summary><div><p>When a popular key expires, many requests may hit the database. Mitigate with TTL jitter, request coalescing/singleflight, stale-while-revalidate, or proactive refresh. Choose based on load and acceptable staleness.</p></div></details></section>
+
+<p class="section-label">Workers</p><h2>Background does not mean unowned</h2><section class="lesson"><pre><code>type Job struct { EvidenceID, TenantID string }
+
+func (w *Worker) Handle(ctx context.Context, job Job) error {
+    meta, err := w.repo.Find(ctx, job.TenantID, job.EvidenceID)
+    if err != nil { return err }
+    reader, err := w.objects.Get(ctx, meta.ObjectKey)
+    if err != nil { return err }
+    defer reader.Close()
+    digest, err := checksum(reader)
+    if err != nil { return err }
+    return w.repo.MarkProcessed(ctx, meta.ID, digest)
+}</code></pre><p>Jobs carry identifiers, not giant payloads. Workers refetch authoritative metadata, stream data, use timeouts, update status, and are idempotent. Set concurrency from downstream capacity rather than CPU count alone.</p></section>
+
+<p class="section-label">Failure design</p><h2>Every partial state needs reconciliation</h2><section class="lesson"><table><thead><tr><th>Failure</th><th>Recovery</th></tr></thead><tbody><tr><td>Metadata created, upload never occurs</td><td>Expire pending records and incomplete multipart uploads.</td></tr><tr><td>Object uploaded, finalization fails</td><td>Retry finalize or sweep orphan objects.</td></tr><tr><td>Processing fails</td><td>Record failed status/error category; bounded retry.</td></tr><tr><td>Cache unavailable</td><td>Fall back to database if safe; observe degraded latency.</td></tr><tr><td>Delete partially succeeds</td><td>Tombstone metadata and retry object deletion.</td></tr></tbody></table></section>
+
+<section class="lab"><h2>Build sequence</h2><ol><li>Add evidence metadata migration and states.</li><li>Create an object-store interface and MinIO adapter.</li><li>Implement authorized upload initiation/finalization.</li><li>Stream and checksum an object in a cancellable worker.</li><li>Add cleanup/reconciliation for pending and orphaned objects.</li><li>Add tenant-safe cache-aside for asset summaries.</li><li>Test cache unavailable/stale, interrupted upload, duplicate job, and large stream.</li></ol></section>
+<section class="quiz"><h2>Knowledge check</h2><p><strong>1.</strong> Why not store file bytes in PostgreSQL here?</p><details class="answer"><summary>Show answer</summary><div>Large blobs increase database backup, replication, memory, and query burden; object storage is designed for streamed immutable objects while PostgreSQL keeps transactional metadata.</div></details><p><strong>2.</strong> Is Redis authoritative?</p><details class="answer"><summary>Show answer</summary><div>Not for this design. It accelerates reads; PostgreSQL remains truth, so cache loss must affect performance rather than correctness.</div></details><p><strong>3.</strong> What makes an upload recoverable?</p><details class="answer"><summary>Show answer</summary><div>Explicit lifecycle states, stable IDs/keys, verification, idempotent finalization, and sweepers for abandoned/orphaned parts.</div></details></section>
+<section class="readiness"><h2>Phase 11 readiness gate</h2><div class="checklist"><label class="check-item"><input type="checkbox" data-check="p11-1"><span>PostgreSQL owns metadata, object storage owns bytes, and cache owns no irreplaceable truth.</span></label><label class="check-item"><input type="checkbox" data-check="p11-2"><span>Uploads are authorized, streamed, bounded, verified, and tenant-keyed.</span></label><label class="check-item"><input type="checkbox" data-check="p11-3"><span>Workers are idempotent, cancellable, bounded, and status-reporting.</span></label><label class="check-item"><input type="checkbox" data-check="p11-4"><span>Cache keys/version/TTL/invalidation and degraded behavior are explicit.</span></label><label class="check-item"><input type="checkbox" data-check="p11-5"><span>Reconciliation handles abandoned uploads, orphan objects, and partial deletion.</span></label></div><p>Next: <span class="command">I'm done with Phase 11, start Phase 12 learning</span></p></section>
+<footer class="phase-footer"><a class="phase-link" href="../phase-10-cel-policies/index.html">← Phase 10</a><a class="phase-link next" href="../phase-12-production/index.html">Phase 12: Production proof →</a></footer></article></main></div><script src="../assets/course.js"></script></body></html>

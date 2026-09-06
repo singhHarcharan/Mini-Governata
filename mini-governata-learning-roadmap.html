@@ -1,0 +1,1198 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A project-based roadmap for learning React and Go by building Mini Governata.">
+  <title>Mini Governata — Build-to-Learn Roadmap</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #17222c;
+      --muted: #61707a;
+      --paper: #f5f0e6;
+      --paper-strong: #fffdf8;
+      --navy: #132a3a;
+      --navy-soft: #214258;
+      --orange: #ee7444;
+      --orange-soft: #ffe2d3;
+      --teal: #138b89;
+      --teal-soft: #d6f3ee;
+      --lime: #b9da68;
+      --line: #d7d0c3;
+      --shadow: 0 18px 50px rgba(19, 42, 58, .12);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        linear-gradient(rgba(19, 42, 58, .035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(19, 42, 58, .035) 1px, transparent 1px),
+        var(--paper);
+      background-size: 28px 28px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.6;
+    }
+
+    a { color: inherit; }
+    button, select, input { font: inherit; }
+    button, select { cursor: pointer; }
+    code, pre { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
+
+    .skip-link {
+      position: fixed;
+      left: 1rem;
+      top: -5rem;
+      z-index: 100;
+      padding: .7rem 1rem;
+      background: var(--navy);
+      color: white;
+    }
+    .skip-link:focus { top: 1rem; }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      min-height: 540px;
+      padding: 4.5rem clamp(1.2rem, 5vw, 5rem) 3.5rem;
+      color: white;
+      background: var(--navy);
+    }
+    .hero::before {
+      content: "";
+      position: absolute;
+      width: 520px;
+      height: 520px;
+      right: -130px;
+      top: -210px;
+      border: 85px solid rgba(185, 218, 104, .14);
+      border-radius: 50%;
+    }
+    .hero::after {
+      content: "";
+      position: absolute;
+      width: 280px;
+      height: 280px;
+      right: 18%;
+      bottom: -210px;
+      transform: rotate(18deg);
+      background: var(--orange);
+      opacity: .22;
+    }
+    .hero-inner { position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: .55rem;
+      margin: 0 0 1.3rem;
+      color: var(--lime);
+      font-size: .78rem;
+      font-weight: 800;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+    }
+    .eyebrow::before { content: ""; width: 32px; height: 2px; background: currentColor; }
+    h1 {
+      max-width: 930px;
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(3rem, 8vw, 6.7rem);
+      font-weight: 500;
+      letter-spacing: -.055em;
+      line-height: .94;
+    }
+    .hero h1 em { color: var(--orange); font-style: italic; }
+    .hero-copy {
+      max-width: 760px;
+      margin: 2rem 0 2.4rem;
+      color: #cedce4;
+      font-size: clamp(1rem, 2vw, 1.22rem);
+    }
+    .hero-meta { display: flex; flex-wrap: wrap; gap: .7rem; }
+    .hero-meta span {
+      padding: .52rem .8rem;
+      border: 1px solid rgba(255,255,255,.18);
+      background: rgba(255,255,255,.06);
+      font-size: .82rem;
+      font-weight: 700;
+      letter-spacing: .03em;
+    }
+
+    .progress-shell {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      color: white;
+      background: rgba(19, 42, 58, .97);
+      border-top: 1px solid rgba(255,255,255,.08);
+      box-shadow: 0 8px 24px rgba(19, 42, 58, .18);
+      backdrop-filter: blur(12px);
+    }
+    .progress-inner {
+      max-width: 1280px;
+      margin: auto;
+      padding: .75rem clamp(1rem, 4vw, 2.5rem);
+      display: grid;
+      grid-template-columns: auto minmax(160px, 1fr) auto;
+      align-items: center;
+      gap: 1rem;
+    }
+    .progress-label { font-size: .82rem; font-weight: 800; white-space: nowrap; }
+    .progress-track { height: 9px; overflow: hidden; background: rgba(255,255,255,.12); border-radius: 20px; }
+    .progress-fill { width: 0; height: 100%; background: linear-gradient(90deg, var(--orange), var(--lime)); transition: width .35s ease; }
+    .progress-number { min-width: 3.4rem; color: var(--lime); font-weight: 900; text-align: right; }
+
+    .page {
+      max-width: 1500px;
+      margin: 0 auto;
+      padding: 3rem clamp(1rem, 4vw, 2.5rem) 6rem;
+    }
+    .doc-layout {
+      display: grid;
+      grid-template-columns: 248px minmax(0, 1fr);
+      gap: clamp(1.25rem, 3vw, 2.5rem);
+      align-items: start;
+    }
+    .doc-content { min-width: 0; }
+    .doc-index { min-width: 0; align-self: stretch; }
+    .index-sticky {
+      position: sticky;
+      top: 76px;
+      max-height: calc(100vh - 96px);
+      overflow-y: auto;
+      padding: 1.1rem;
+      border: 1px solid var(--line);
+      background: rgba(255, 253, 248, .96);
+      box-shadow: 0 10px 30px rgba(19,42,58,.09);
+      scrollbar-width: thin;
+    }
+    .index-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: .75rem;
+      padding-bottom: .75rem;
+      border-bottom: 1px solid var(--line);
+    }
+    .index-header h2 {
+      margin: 0;
+      font-size: 1.35rem;
+    }
+    .index-header small { color: var(--muted); font-weight: 750; }
+    .index-nav { display: grid; gap: .16rem; margin-top: .7rem; }
+    .index-link {
+      display: grid;
+      grid-template-columns: 24px minmax(0, 1fr) auto;
+      gap: .45rem;
+      align-items: center;
+      padding: .47rem .5rem;
+      color: var(--muted);
+      border-left: 3px solid transparent;
+      text-decoration: none;
+      font-size: .78rem;
+      line-height: 1.28;
+      transition: background .15s, color .15s, border-color .15s;
+    }
+    .index-link:hover,
+    .index-link.active {
+      color: var(--navy);
+      border-left-color: var(--orange);
+      background: var(--orange-soft);
+    }
+    .index-link.active { font-weight: 800; }
+    .index-link .index-number {
+      display: grid;
+      place-items: center;
+      width: 22px;
+      height: 22px;
+      color: white;
+      background: var(--teal);
+      border-radius: 50%;
+      font-size: .66rem;
+      font-style: normal;
+      font-weight: 900;
+    }
+    .index-link[data-status="completed"] .index-number { background: #43854b; }
+    .index-link[data-status="building"] .index-number,
+    .index-link[data-status="testing"] .index-number { background: var(--orange); }
+    .index-link[data-status="blocked"] .index-number { background: #b33c32; }
+    .index-percent { color: var(--teal); font-size: .66rem; font-style: normal; font-weight: 900; }
+    .index-section-link {
+      display: block;
+      padding: .5rem;
+      color: var(--navy);
+      text-decoration: none;
+      font-size: .78rem;
+      font-weight: 850;
+    }
+    .index-section-link:hover { color: var(--orange); }
+    .index-divider { margin: .55rem .5rem .35rem; color: #89959c; font-size: .62rem; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
+    .phase, #mission-heading, #architecture-heading, #roadmap-heading, #mastery-heading { scroll-margin-top: 82px; }
+    .intro-grid { display: grid; grid-template-columns: 1.1fr .9fr; gap: 1.2rem; margin-bottom: 2rem; }
+    .panel { padding: clamp(1.35rem, 3vw, 2.2rem); background: var(--paper-strong); border: 1px solid var(--line); box-shadow: var(--shadow); }
+    .panel h2, .panel h3 { margin-top: 0; }
+    .section-kicker { margin: 0 0 .45rem; color: var(--teal); font-size: .75rem; font-weight: 900; letter-spacing: .13em; text-transform: uppercase; }
+    h2 { margin: 0 0 1rem; font-family: Georgia, "Times New Roman", serif; font-size: clamp(1.8rem, 4vw, 3rem); line-height: 1.08; }
+    h3 { line-height: 1.25; }
+    p { margin: .55rem 0 1rem; }
+    .muted { color: var(--muted); }
+    .principles { display: grid; grid-template-columns: repeat(2, 1fr); gap: .8rem; }
+    .principle { padding: 1rem; background: #edf4f0; border-left: 4px solid var(--teal); }
+    .principle strong { display: block; margin-bottom: .2rem; }
+
+    .architecture { margin: 1.2rem 0 2.4rem; padding: 1.5rem; overflow-x: auto; color: white; background: var(--navy); }
+    .architecture-title { margin-bottom: 1.2rem; display: flex; justify-content: space-between; gap: 1rem; align-items: baseline; }
+    .architecture-title h2 { margin: 0; font-size: 1.55rem; }
+    .architecture-title span { color: #9fb7c5; font-size: .86rem; }
+    .flow { min-width: 830px; display: flex; align-items: stretch; gap: .5rem; }
+    .flow-node { flex: 1; padding: 1rem .75rem; border: 1px solid rgba(255,255,255,.15); background: rgba(255,255,255,.07); text-align: center; }
+    .flow-node strong { display: block; color: var(--lime); font-size: .82rem; }
+    .flow-node small { color: #c4d1d8; }
+    .flow-arrow { align-self: center; color: var(--orange); font-size: 1.5rem; }
+
+    .controls {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) auto auto auto;
+      gap: .7rem;
+      margin: 2rem 0 1rem;
+    }
+    .search, .button, .filter {
+      min-height: 44px;
+      border: 1px solid var(--line);
+      background: var(--paper-strong);
+      color: var(--ink);
+    }
+    .search { width: 100%; padding: .65rem .85rem; }
+    .button, .filter { padding: .65rem .85rem; font-weight: 750; }
+    a.button { display: inline-flex; align-items: center; color: var(--ink); text-decoration: none; }
+    .button.course { color: white; background: var(--teal); border-color: var(--teal); }
+    .button:hover, .filter:hover { border-color: var(--teal); }
+    .button.danger { color: #8a3223; }
+
+    .phase-list { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+    .phase-list::before { content: ""; position: absolute; left: 27px; top: 25px; bottom: 25px; width: 2px; background: var(--line); }
+    .phase {
+      --phase-accent: var(--teal);
+      position: relative;
+      min-width: 0;
+      overflow: clip;
+      background: var(--paper-strong);
+      border: 1px solid var(--line);
+      box-shadow: 0 8px 26px rgba(19,42,58,.07);
+    }
+    .phase[data-status="completed"] { --phase-accent: #43854b; border-color: #9cc7a1; }
+    .phase[data-status="building"], .phase[data-status="testing"] { --phase-accent: var(--orange); }
+    .phase[data-status="blocked"] { --phase-accent: #b33c32; }
+    .phase[hidden] { display: none; }
+    .phase summary {
+      position: relative;
+      display: grid;
+      grid-template-columns: 58px minmax(0, 1fr) auto;
+      gap: 1rem;
+      align-items: center;
+      min-height: 106px;
+      padding: 1rem 1.1rem 1rem .65rem;
+      list-style: none;
+      cursor: pointer;
+    }
+    .phase summary::-webkit-details-marker { display: none; }
+    .phase summary:hover { background: #faf7f0; }
+    .phase-number {
+      position: relative;
+      z-index: 2;
+      display: grid;
+      place-items: center;
+      width: 43px;
+      height: 43px;
+      margin-left: 5px;
+      border-radius: 50%;
+      color: white;
+      background: var(--phase-accent);
+      font-weight: 900;
+      box-shadow: 0 0 0 6px var(--paper-strong);
+    }
+    .phase-title-wrap { min-width: 0; }
+    .phase-title { margin: 0; font-size: clamp(1.08rem, 2.5vw, 1.45rem); }
+    .phase-subtitle { margin: .24rem 0 0; color: var(--muted); font-size: .9rem; }
+    .phase-badges { display: flex; flex-wrap: wrap; gap: .45rem; margin-top: .55rem; }
+    .badge { padding: .23rem .48rem; background: var(--teal-soft); color: #116664; font-size: .72rem; font-weight: 800; }
+    .badge.time { background: var(--orange-soft); color: #914023; }
+    .summary-side { display: flex; align-items: center; gap: .7rem; }
+    .phase-percent { min-width: 44px; color: var(--phase-accent); font-size: .82rem; font-weight: 900; text-align: right; }
+    .chevron { width: 12px; height: 12px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(45deg); transition: transform .2s; }
+    details[open] .chevron { transform: rotate(225deg); }
+
+    .phase-body { padding: 0 1.25rem 1.6rem 4.95rem; border-top: 1px solid var(--line); }
+    .phase-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .8rem; align-items: center; padding: 1rem 0; }
+    .status-group { display: flex; align-items: center; gap: .6rem; font-size: .82rem; font-weight: 800; }
+    .status-select { padding: .48rem .65rem; border: 1px solid var(--line); color: var(--ink); background: white; }
+    .phase-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+    .info-block { padding: 1rem; border: 1px solid #e5ded2; background: #fbf9f4; }
+    .info-block.wide { grid-column: 1 / -1; }
+    .info-block h4 { margin: 0 0 .55rem; color: var(--navy-soft); font-size: .78rem; letter-spacing: .09em; text-transform: uppercase; }
+    .info-block ul { margin: .4rem 0 0; padding-left: 1.15rem; }
+    .info-block li { margin: .36rem 0; }
+    .learn-vs-master { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; }
+    .learn-card { padding: .9rem; background: var(--orange-soft); }
+    .master-card { padding: .9rem; background: var(--teal-soft); }
+    .learn-card strong, .master-card strong { display: block; margin-bottom: .4rem; }
+    pre { margin: .5rem 0 0; padding: 1rem; overflow: auto; color: #e7f0f4; background: #142631; font-size: .8rem; line-height: 1.55; }
+
+    .checklist { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .55rem; }
+    .task {
+      display: flex;
+      gap: .65rem;
+      align-items: flex-start;
+      padding: .7rem;
+      border: 1px solid #ded7cb;
+      background: white;
+    }
+    .task:hover { border-color: var(--teal); }
+    .task input { width: 18px; height: 18px; margin-top: .16rem; accent-color: var(--teal); }
+    .task span { font-size: .9rem; }
+    .task input:checked + span { color: var(--muted); text-decoration: line-through; }
+    .done-gate { border-left: 4px solid var(--lime); background: #f1f7e4; }
+    .warning { border-left: 4px solid var(--orange); background: #fff3eb; }
+
+    .reference-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+    .reference-table th, .reference-table td { padding: .7rem; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    .reference-table th { color: var(--navy); background: #eef1ed; }
+    .reference-table code { color: #9b3f22; overflow-wrap: anywhere; }
+
+    .footer { padding: 3rem 1rem; color: white; background: var(--navy); text-align: center; }
+    .footer strong { color: var(--lime); }
+    .noscript { padding: 1rem; background: #fff1c7; color: #583f00; text-align: center; }
+
+    @media (max-width: 1050px) {
+      .page { padding-top: 1rem; }
+      .doc-layout { grid-template-columns: minmax(0, 1fr); }
+      .doc-index { position: sticky; top: 52px; z-index: 30; align-self: start; width: 100%; }
+      .index-sticky {
+        position: static;
+        max-height: none;
+        padding: .65rem;
+        overflow: hidden;
+      }
+      .index-header { padding: 0 .25rem .45rem; }
+      .index-nav { display: flex; overflow-x: auto; gap: .35rem; margin-top: .5rem; padding-bottom: .2rem; }
+      .index-link { flex: 0 0 auto; grid-template-columns: 22px auto auto; max-width: 210px; border-left: 0; border-bottom: 3px solid transparent; }
+      .index-link:hover, .index-link.active { border-left-color: transparent; border-bottom-color: var(--orange); }
+      .index-section-link, .index-divider { display: none; }
+    }
+    @media (max-width: 860px) {
+      .intro-grid, .phase-grid, .learn-vs-master { grid-template-columns: 1fr; }
+      .flow { min-width: 0; flex-direction: column; }
+      .flow-arrow { transform: rotate(90deg); }
+      .controls { grid-template-columns: 1fr 1fr; }
+      .controls .search { grid-column: 1 / -1; }
+      .phase-body { padding-left: 1rem; }
+      .phase summary { grid-template-columns: 48px minmax(0, 1fr); }
+      .summary-side { grid-column: 2; justify-content: space-between; }
+      .checklist { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 560px) {
+      .hero { min-height: auto; padding-top: 3rem; }
+      .progress-inner { grid-template-columns: auto 1fr; }
+      .progress-number { grid-column: 2; }
+      .controls { grid-template-columns: 1fr; }
+      .controls .search { grid-column: auto; }
+      .principles { grid-template-columns: 1fr; }
+    }
+    @media print {
+      .progress-shell, .doc-index, .controls, .status-group, .chevron { display: none !important; }
+      body { background: white; font-size: 10pt; }
+      .hero { min-height: auto; padding: 2rem; }
+      .hero::before, .hero::after { display: none; }
+      .page { max-width: none; padding: 1rem; }
+      .doc-layout { display: block; }
+      .phase { break-inside: avoid; box-shadow: none; }
+      .phase-body { display: block !important; }
+      details:not([open]) > .phase-body { display: block; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#roadmap">Skip to roadmap</a>
+  <noscript><div class="noscript">The roadmap content works without JavaScript, but progress saving and filters require JavaScript.</div></noscript>
+
+  <header class="hero">
+    <div class="hero-inner">
+      <p class="eyebrow">Project-based learning blueprint</p>
+      <h1>Build <em>Mini Governata.</em><br>Understand the real platform.</h1>
+      <p class="hero-copy">A divide-and-conquer roadmap for a React developer becoming confident in Go, backend architecture, distributed systems, and the specific patterns used across Governata. Every phase produces something visible before adding the next layer.</p>
+      <div class="hero-meta" aria-label="Roadmap summary">
+        <span>13 focused phases</span>
+        <span>One evolving product</span>
+        <span>React → Go → distributed system</span>
+        <span>Progress saved in your browser</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="progress-shell" aria-label="Overall learning progress">
+    <div class="progress-inner">
+      <span class="progress-label">Overall progress</span>
+      <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="progress-fill"></div></div>
+      <span class="progress-number">0%</span>
+    </div>
+  </div>
+
+  <main class="page">
+    <div class="doc-layout">
+      <aside class="doc-index" aria-label="Document index">
+        <div class="index-sticky">
+          <div class="index-header">
+            <h2>Index</h2>
+            <small>Jump to</small>
+          </div>
+          <nav class="index-nav" aria-label="Roadmap sections and phases">
+            <a class="index-section-link" href="#mission-heading">Mission &amp; learning rules</a>
+            <a class="index-section-link" href="#architecture-heading">Execution path</a>
+            <div class="index-divider">Build phases</div>
+            <a class="index-link" data-index-phase="0" data-status="not-started" href="#phase-0"><i class="index-number">0</i><span>Orientation &amp; tracing</span><em class="index-percent">0%</em></a>
+            <a class="index-link" data-index-phase="1" data-status="not-started" href="#phase-1"><i class="index-number">1</i><span>Frontend workspace</span><em class="index-percent">0%</em></a>
+            <a class="index-link" data-index-phase="2" data-status="not-started" href="#phase-2"><i class="index-number">2</i><span>Go foundations</span><em class="index-percent">0%</em></a>
+            <a class="index-link" data-index-phase="3" data-status="not-started" href="#phase-3"><i class="index-number">3</i><span>First Go API</span><em class="index-percent">0%</em></a>
+            <a class="index-link" data-index-phase="4" data-status="not-started" href="#phase-4"><i class="index-number">4</i><span>Interfaces &amp; boundaries</span><em class="index-percent">0%</em></a>
+            <a class="index-link" data-index-phase="5" data-status="not-started" href="#phase-5"><i class="index-number">5</i><span>PostgreSQL &amp; GORM</span><em class="index-percent">0%</em></a>
+            <a class="index-link" data-index-phase="6" data-status="not-started" href="#phase-6"><i class="index-number">6</i><span>Auth &amp; tenants</span><em class="index-percent">0%</em></a>
+            <a class="index-link" data-index-phase="7" data-status="not-started" href="#phase-7"><i class="index-number">7</i><span>Workflow &amp; audit</span><em class="index-percent">0%</em></a>
+            <a class="index-link" data-index-phase="8" data-status="not-started" href="#phase-8"><i class="index-number">8</i><span>Core, Governance &amp; NATS</span><em class="index-percent">0%</em></a>
+            <a class="index-link" data-index-phase="9" data-status="not-started" href="#phase-9"><i class="index-number">9</i><span>Reliable events</span><em class="index-percent">0%</em></a>
+            <a class="index-link" data-index-phase="10" data-status="not-started" href="#phase-10"><i class="index-number">10</i><span>Policies with CEL</span><em class="index-percent">0%</em></a>
+            <a class="index-link" data-index-phase="11" data-status="not-started" href="#phase-11"><i class="index-number">11</i><span>Redis &amp; evidence</span><em class="index-percent">0%</em></a>
+            <a class="index-link" data-index-phase="12" data-status="not-started" href="#phase-12"><i class="index-number">12</i><span>Production proof</span><em class="index-percent">0%</em></a>
+            <div class="index-divider">Reference</div>
+            <a class="index-section-link" href="#mastery-heading">Governata mastery map</a>
+            <a class="index-section-link" href="#study-loop-heading">Repeatable study loop</a>
+          </nav>
+        </div>
+      </aside>
+      <div class="doc-content">
+    <section class="intro-grid" aria-labelledby="mission-heading">
+      <article class="panel">
+        <p class="section-kicker">The mission</p>
+        <h2 id="mission-heading">Learn the system by growing it.</h2>
+        <p>You will build a small data-governance product containing assets, approval tasks, policies, evidence, audit history, and background processing. We begin in your strongest area, React, then replace mocks with a Go API, then add database and distributed-system boundaries one at a time.</p>
+        <p class="muted"><strong>End state:</strong> when you see a Governata screen, you can trace it from the React interaction through its API contract, middleware, Go handler, service, repository, database operation, event publication, and consumer.</p>
+      </article>
+      <aside class="panel">
+        <p class="section-kicker">Learning rules</p>
+        <div class="principles">
+          <div class="principle"><strong>One new difficulty</strong>Add only one unfamiliar architectural idea per phase.</div>
+          <div class="principle"><strong>Visible result first</strong>Every phase must change something you can see or test.</div>
+          <div class="principle"><strong>Trace every feature</strong>Always write the full frontend-to-storage execution path.</div>
+          <div class="principle"><strong>Earn complexity</strong>Do not add NATS, Redis, or Kubernetes before their problem exists.</div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="architecture" aria-labelledby="architecture-heading">
+      <div class="architecture-title">
+        <h2 id="architecture-heading">The execution path you will master</h2>
+        <span>Command-click within a box; search the contract between boxes.</span>
+      </div>
+      <div class="flow" aria-label="React to Go execution flow">
+        <div class="flow-node"><strong>01 React</strong><small>page and user action</small></div><span class="flow-arrow">→</span>
+        <div class="flow-node"><strong>02 Query</strong><small>hook and cache</small></div><span class="flow-arrow">→</span>
+        <div class="flow-node"><strong>03 HTTP</strong><small>method and URL</small></div><span class="flow-arrow">→</span>
+        <div class="flow-node"><strong>04 Gin</strong><small>route and middleware</small></div><span class="flow-arrow">→</span>
+        <div class="flow-node"><strong>05 Service</strong><small>business rule</small></div><span class="flow-arrow">→</span>
+        <div class="flow-node"><strong>06 Store</strong><small>repository and SQL</small></div><span class="flow-arrow">→</span>
+        <div class="flow-node"><strong>07 Event</strong><small>NATS and worker</small></div>
+      </div>
+    </section>
+
+    <section id="roadmap" aria-labelledby="roadmap-heading">
+      <p class="section-kicker">Divide and conquer</p>
+      <h2 id="roadmap-heading">The build phases</h2>
+      <p class="muted">Open a phase, change its status, and tick tasks as you complete them. Your state is saved locally in this browser.</p>
+
+      <div class="controls" aria-label="Roadmap controls">
+        <a class="button course" href="mini-governata-course/index.html">Open learning course →</a>
+        <input id="search" class="search" type="search" placeholder="Search phases or concepts…" aria-label="Search phases">
+        <select id="status-filter" class="filter" aria-label="Filter by status">
+          <option value="all">All statuses</option>
+          <option value="not-started">Not started</option>
+          <option value="learning">Learning</option>
+          <option value="building">Building</option>
+          <option value="testing">Testing</option>
+          <option value="completed">Completed</option>
+          <option value="blocked">Blocked</option>
+        </select>
+        <button id="expand-all" class="button" type="button">Expand all</button>
+        <button id="reset-progress" class="button danger" type="button">Reset progress</button>
+      </div>
+
+      <div class="phase-list">
+        <details id="phase-0" class="phase" data-phase="0" data-status="not-started">
+          <summary>
+            <span class="phase-number">0</span>
+            <span class="phase-title-wrap"><h3 class="phase-title">Orientation: Learn to trace before you build</h3><p class="phase-subtitle">Turn a large codebase into a sequence of small, searchable contracts.</p><span class="phase-badges"><span class="badge time">2–3 sessions</span><span class="badge">Navigation</span><span class="badge">Architecture</span></span></span>
+            <span class="summary-side"><span class="phase-percent">0%</span><span class="chevron" aria-hidden="true"></span></span>
+          </summary>
+          <div class="phase-body">
+            <div class="phase-toolbar"><strong>Outcome: you can explain one Governata request from click to database.</strong><label class="status-group">Status <select class="status-select"><option value="not-started">Not started</option><option value="learning">Learning</option><option value="building">Building</option><option value="testing">Testing</option><option value="completed">Completed</option><option value="blocked">Blocked</option></select></label></div>
+            <div class="phase-grid">
+              <div class="info-block"><h4>Purpose</h4><p>Remove the feeling that Go code is disconnected. Learn which transitions are symbol calls and which are HTTP, message, database, or interface contracts.</p></div>
+              <div class="info-block"><h4>What you will produce</h4><p>A handwritten execution map for “Complete task” and a glossary of 25 Go/platform terms in your own words.</p></div>
+              <div class="info-block wide"><h4>Learn vs. master</h4><div class="learn-vs-master"><div class="learn-card"><strong>Learn now</strong>Go modules, packages, exported names, method receivers, routes, handlers, interfaces, repositories, NATS subjects.</div><div class="master-card"><strong>Master by the gate</strong>Search by URL or subject when Command-click cannot cross a runtime boundary.</div></div></div>
+              <div class="info-block wide"><h4>Guided code-reading order</h4><pre>TasksPage.tsx
+  → api/governance.ts (POST /tasks/:id/complete)
+  → api/router.go (route registration)
+  → handlers/tasks.go (CompleteTask)
+  → workflow/engine.go (UpdateTaskStatus)
+  → store/pg/tasks.go (model/repository)
+  → migrations/001_schema.up.sql (table)</pre></div>
+              <div class="info-block wide"><h4>Build checklist</h4><div class="checklist">
+                <label class="task"><input type="checkbox"><span>Confirm Go, VS Code Go extension, and gopls work.</span></label>
+                <label class="task"><input type="checkbox"><span>Open the workspace root so the root go.work is active.</span></label>
+                <label class="task"><input type="checkbox"><span>Trace one GET and one POST flow end to end.</span></label>
+                <label class="task"><input type="checkbox"><span>Use “Go to Implementations” on at least one interface.</span></label>
+                <label class="task"><input type="checkbox"><span>Find one NATS publisher and its subscriber by subject.</span></label>
+                <label class="task"><input type="checkbox"><span>Draw the request path without looking at this document.</span></label>
+              </div></div>
+              <div class="info-block wide done-gate"><h4>Definition of done</h4><p>You can explain why Command-click stops at HTTP and NATS boundaries, and you can continue the trace using global search.</p></div>
+            </div>
+          </div>
+        </details>
+
+        <details id="phase-1" class="phase" data-phase="1" data-status="not-started" open>
+          <summary>
+            <span class="phase-number">1</span>
+            <span class="phase-title-wrap"><h3 class="phase-title">Frontend-only governance workspace</h3><p class="phase-subtitle">Start from React confidence and build the product language before any backend exists.</p><span class="phase-badges"><span class="badge time">4–6 sessions</span><span class="badge">React</span><span class="badge">TypeScript</span><span class="badge">TanStack Query</span></span></span>
+            <span class="summary-side"><span class="phase-percent">0%</span><span class="chevron" aria-hidden="true"></span></span>
+          </summary>
+          <div class="phase-body">
+            <div class="phase-toolbar"><strong>Outcome: a polished UI that behaves like a real app using a mock API.</strong><label class="status-group">Status <select class="status-select"><option value="not-started">Not started</option><option value="learning">Learning</option><option value="building">Building</option><option value="testing">Testing</option><option value="completed">Completed</option><option value="blocked">Blocked</option></select></label></div>
+            <div class="phase-grid">
+              <div class="info-block"><h4>What are we creating?</h4><p>A React workspace for data assets and stewardship tasks. Users browse assets, inspect details, filter tasks, and complete an approval workflow. Mock Service Worker acts as the temporary backend.</p></div>
+              <div class="info-block"><h4>Why this phase exists</h4><p>You already know React. We first define the screens, domain vocabulary, API shapes, loading states, and errors. When Go arrives, the frontend becomes an executable specification.</p></div>
+              <div class="info-block wide"><h4>Learn vs. master</h4><div class="learn-vs-master"><div class="learn-card"><strong>Learn now</strong>Domain modeling, API boundaries, Zod validation, MSW, query keys, mutations, invalidation, feature-based folders.</div><div class="master-card"><strong>Master by the gate</strong>Separating server state from UI state; building screens that never import mock data directly.</div></div></div>
+              <div class="info-block wide"><h4>Folder structure</h4><pre>mini-governata/
+└── apps/web/
+    ├── src/
+    │   ├── app/              # router, providers, app shell
+    │   ├── features/
+    │   │   ├── assets/       # pages, components, hooks, schemas
+    │   │   └── tasks/
+    │   ├── api/              # fetch client and endpoint functions
+    │   ├── mocks/            # MSW handlers and seed factories
+    │   ├── shared/           # reusable UI, errors, utilities
+    │   └── test/
+    ├── package.json
+    └── vite.config.ts</pre></div>
+              <div class="info-block"><h4>Features</h4><ul><li>Asset list and detail pages</li><li>Task list, filters, detail drawer</li><li>Complete/cancel actions</li><li>Loading, empty, error states</li><li>Responsive navigation</li></ul></div>
+              <div class="info-block warning"><h4>Do not add yet</h4><p>No Go, database, auth, Docker, NATS, Redis, MinIO, or microservices. The goal is a clean frontend contract, not infrastructure.</p></div>
+              <div class="info-block wide"><h4>Build checklist</h4><div class="checklist">
+                <label class="task"><input type="checkbox"><span>Create the Vite + React + TypeScript application.</span></label>
+                <label class="task"><input type="checkbox"><span>Define Asset, Task, TaskStatus, and API response types.</span></label>
+                <label class="task"><input type="checkbox"><span>Build asset list, asset detail, and task list routes.</span></label>
+                <label class="task"><input type="checkbox"><span>Create one fetch client; UI components never call fetch.</span></label>
+                <label class="task"><input type="checkbox"><span>Implement MSW GET and POST handlers.</span></label>
+                <label class="task"><input type="checkbox"><span>Add React Query hooks and cache invalidation.</span></label>
+                <label class="task"><input type="checkbox"><span>Handle loading, error, empty, and success states.</span></label>
+                <label class="task"><input type="checkbox"><span>Write component and API-contract tests.</span></label>
+              </div></div>
+              <div class="info-block wide done-gate"><h4>Definition of done</h4><p>A user can browse mock assets, open a task, complete it, and immediately see the updated state. Refreshing resets data because persistence intentionally does not exist yet.</p></div>
+            </div>
+          </div>
+        </details>
+
+        <details id="phase-2" class="phase" data-phase="2" data-status="not-started">
+          <summary>
+            <span class="phase-number">2</span>
+            <span class="phase-title-wrap"><h3 class="phase-title">Go foundations through a task CLI</h3><p class="phase-subtitle">Learn Go’s mental model without HTTP or framework noise.</p><span class="phase-badges"><span class="badge time">3–5 sessions</span><span class="badge">Go syntax</span><span class="badge">Tests</span></span></span>
+            <span class="summary-side"><span class="phase-percent">0%</span><span class="chevron" aria-hidden="true"></span></span>
+          </summary>
+          <div class="phase-body">
+            <div class="phase-toolbar"><strong>Outcome: a tested CLI that enforces task transitions.</strong><label class="status-group">Status <select class="status-select"><option value="not-started">Not started</option><option value="learning">Learning</option><option value="building">Building</option><option value="testing">Testing</option><option value="completed">Completed</option><option value="blocked">Blocked</option></select></label></div>
+            <div class="phase-grid">
+              <div class="info-block"><h4>Purpose</h4><p>Translate familiar TypeScript ideas into Go: structs instead of object shapes, methods instead of class methods, explicit errors instead of thrown exceptions, and pointers for optional values.</p></div>
+              <div class="info-block"><h4>Product increment</h4><p>A command-line task workflow: create, assign, start, block, complete, cancel, and list tasks stored in memory.</p></div>
+              <div class="info-block wide"><h4>Concepts</h4><div class="learn-vs-master"><div class="learn-card"><strong>Learn now</strong>Packages, visibility, structs, tags, slices, maps, pointers, zero values, methods, receivers, custom types, constants, multiple returns, errors and defer.</div><div class="master-card"><strong>Master by the gate</strong>Read Go types confidently and implement business rules without using a web framework.</div></div></div>
+              <div class="info-block wide"><h4>Folder structure</h4><pre>services/governance/
+├── cmd/taskcli/main.go
+├── internal/domain/
+│   ├── task.go
+│   └── transition.go
+├── internal/service/task_service.go
+├── internal/store/memory/task_repository.go
+├── internal/service/task_service_test.go
+└── go.mod</pre></div>
+              <div class="info-block wide"><h4>Build checklist</h4><div class="checklist">
+                <label class="task"><input type="checkbox"><span>Create a Go module and packages.</span></label>
+                <label class="task"><input type="checkbox"><span>Model TaskStatus with a named string type and constants.</span></label>
+                <label class="task"><input type="checkbox"><span>Implement valid and invalid state transitions.</span></label>
+                <label class="task"><input type="checkbox"><span>Return and wrap errors with context.</span></label>
+                <label class="task"><input type="checkbox"><span>Write table-driven transition tests.</span></label>
+                <label class="task"><input type="checkbox"><span>Run the CLI and explain each package dependency.</span></label>
+              </div></div>
+              <div class="info-block wide done-gate"><h4>Definition of done</h4><p><code>go test ./...</code> passes, invalid transitions return clear errors, and you can explain value vs pointer receivers.</p></div>
+            </div>
+          </div>
+        </details>
+
+        <details id="phase-3" class="phase" data-phase="3" data-status="not-started">
+          <summary>
+            <span class="phase-number">3</span>
+            <span class="phase-title-wrap"><h3 class="phase-title">First Go HTTP API</h3><p class="phase-subtitle">Expose the in-memory workflow through the same contract the React app already uses.</p><span class="phase-badges"><span class="badge time">4–6 sessions</span><span class="badge">Gin</span><span class="badge">JSON</span><span class="badge">Middleware</span></span></span>
+            <span class="summary-side"><span class="phase-percent">0%</span><span class="chevron" aria-hidden="true"></span></span>
+          </summary>
+          <div class="phase-body">
+            <div class="phase-toolbar"><strong>Outcome: React talks to a real Go process for the first time.</strong><label class="status-group">Status <select class="status-select"><option value="not-started">Not started</option><option value="learning">Learning</option><option value="building">Building</option><option value="testing">Testing</option><option value="completed">Completed</option><option value="blocked">Blocked</option></select></label></div>
+            <div class="phase-grid">
+              <div class="info-block"><h4>Purpose</h4><p>Understand the HTTP seam that Command-click cannot cross. The TypeScript API contract remains stable; only the implementation behind it changes from MSW to Go.</p></div>
+              <div class="info-block"><h4>Endpoints</h4><ul><li><code>GET /health</code></li><li><code>GET/POST /api/v1/governance/tasks</code></li><li><code>GET /tasks/:id</code></li><li><code>POST /tasks/:id/complete</code></li><li><code>POST /tasks/:id/cancel</code></li></ul></div>
+              <div class="info-block wide"><h4>Concepts</h4><div class="learn-vs-master"><div class="learn-card"><strong>Learn now</strong><code>net/http</code>, Gin, route groups, request binding, validation, status codes, JSON tags, CORS, request IDs, logging middleware, graceful shutdown.</div><div class="master-card"><strong>Master by the gate</strong>Trace React mutation → URL → Gin route → handler → service → response.</div></div></div>
+              <div class="info-block wide"><h4>Folder additions</h4><pre>services/governance/
+├── cmd/api/main.go
+└── internal/api/
+    ├── router.go
+    ├── handlers/tasks.go
+    ├── middleware/request_id.go
+    └── response/errors.go</pre></div>
+              <div class="info-block wide"><h4>Build checklist</h4><div class="checklist">
+                <label class="task"><input type="checkbox"><span>Add health and task routes.</span></label>
+                <label class="task"><input type="checkbox"><span>Validate malformed JSON and missing fields.</span></label>
+                <label class="task"><input type="checkbox"><span>Return consistent JSON errors and status codes.</span></label>
+                <label class="task"><input type="checkbox"><span>Add request ID, recovery, logging, and CORS middleware.</span></label>
+                <label class="task"><input type="checkbox"><span>Replace MSW in development with the Go base URL.</span></label>
+                <label class="task"><input type="checkbox"><span>Test handlers using httptest.</span></label>
+              </div></div>
+              <div class="info-block wide done-gate"><h4>Definition of done</h4><p>The same React screens work against Go, API errors render in the UI, and stopping the server produces a controlled frontend error rather than a blank page.</p></div>
+            </div>
+          </div>
+        </details>
+
+        <details id="phase-4" class="phase" data-phase="4" data-status="not-started">
+          <summary>
+            <span class="phase-number">4</span>
+            <span class="phase-title-wrap"><h3 class="phase-title">Interfaces and clean backend boundaries</h3><p class="phase-subtitle">Make Go navigation predictable through explicit dependency direction.</p><span class="phase-badges"><span class="badge time">3–5 sessions</span><span class="badge">Interfaces</span><span class="badge">Dependency injection</span></span></span>
+            <span class="summary-side"><span class="phase-percent">0%</span><span class="chevron" aria-hidden="true"></span></span>
+          </summary>
+          <div class="phase-body">
+            <div class="phase-toolbar"><strong>Outcome: handlers depend on behavior, not database details.</strong><label class="status-group">Status <select class="status-select"><option value="not-started">Not started</option><option value="learning">Learning</option><option value="building">Building</option><option value="testing">Testing</option><option value="completed">Completed</option><option value="blocked">Blocked</option></select></label></div>
+            <div class="phase-grid">
+              <div class="info-block"><h4>Purpose</h4><p>Learn why “Go to Definition” may land on an interface. Go interfaces are satisfied implicitly, and constructors wire a concrete implementation at runtime.</p></div>
+              <div class="info-block"><h4>Product increment</h4><p>Refactor the working API without changing behavior. Add isolated handler, service, and repository tests.</p></div>
+              <div class="info-block wide"><h4>Concepts</h4><div class="learn-vs-master"><div class="learn-card"><strong>Learn now</strong>Small consumer-owned interfaces, implicit satisfaction, constructor injection, dependency inversion, compile-time interface assertions, test doubles.</div><div class="master-card"><strong>Master by the gate</strong>Use Go to Implementations and trace concrete construction back to <code>main.go</code>.</div></div></div>
+              <div class="info-block wide"><h4>Target dependency direction</h4><pre>cmd/api → router → handler → service → repository interface
+                                      ↑
+                         memory repository implements it
+
+Rules:
+• domain imports nothing from api or storage
+• service never imports Gin
+• handler never runs a database query
+• main.go owns concrete dependency wiring</pre></div>
+              <div class="info-block wide"><h4>Build checklist</h4><div class="checklist">
+                <label class="task"><input type="checkbox"><span>Define repository behavior beside the consuming service.</span></label>
+                <label class="task"><input type="checkbox"><span>Inject service dependencies through constructors.</span></label>
+                <label class="task"><input type="checkbox"><span>Move all business rules out of handlers.</span></label>
+                <label class="task"><input type="checkbox"><span>Add fake repositories for fast service tests.</span></label>
+                <label class="task"><input type="checkbox"><span>Practice Go to Definition vs Go to Implementations.</span></label>
+                <label class="task"><input type="checkbox"><span>Draw the package import graph and verify no cycle exists.</span></label>
+              </div></div>
+              <div class="info-block wide done-gate"><h4>Definition of done</h4><p>You can swap the repository implementation in <code>main.go</code> without modifying handlers or services.</p></div>
+            </div>
+          </div>
+        </details>
+
+        <details id="phase-5" class="phase" data-phase="5" data-status="not-started">
+          <summary>
+            <span class="phase-number">5</span>
+            <span class="phase-title-wrap"><h3 class="phase-title">PostgreSQL, GORM, and migrations</h3><p class="phase-subtitle">Replace temporary memory with durable, queryable state.</p><span class="phase-badges"><span class="badge time">5–8 sessions</span><span class="badge">PostgreSQL</span><span class="badge">GORM</span><span class="badge">SQL</span></span></span>
+            <span class="summary-side"><span class="phase-percent">0%</span><span class="chevron" aria-hidden="true"></span></span>
+          </summary>
+          <div class="phase-body">
+            <div class="phase-toolbar"><strong>Outcome: tasks and assets survive restarts and support real filtering.</strong><label class="status-group">Status <select class="status-select"><option value="not-started">Not started</option><option value="learning">Learning</option><option value="building">Building</option><option value="testing">Testing</option><option value="completed">Completed</option><option value="blocked">Blocked</option></select></label></div>
+            <div class="phase-grid">
+              <div class="info-block"><h4>Purpose</h4><p>Learn the three representations of one entity: API DTO, domain model, and database model. Understand that GORM tags and migrations are executable storage contracts.</p></div>
+              <div class="info-block"><h4>Product increment</h4><p>Persistent tasks, assets, comments, and task events with filters, pagination, ordering, indexes, and safe updates.</p></div>
+              <div class="info-block wide"><h4>Concepts</h4><div class="learn-vs-master"><div class="learn-card"><strong>Learn now</strong>SQL tables and indexes, UUIDs, nullable columns, JSONB, GORM models and queries, transactions, migrations, connection pools, soft delete.</div><div class="master-card"><strong>Master by the gate</strong>Trace struct field → GORM tag → column → migration and explain transaction boundaries.</div></div></div>
+              <div class="info-block wide"><h4>Folder additions</h4><pre>services/governance/
+├── migrations/
+│   ├── 001_create_assets.up.sql
+│   ├── 002_create_tasks.up.sql
+│   └── 003_create_task_events.up.sql
+└── internal/store/postgres/
+    ├── db.go
+    ├── models.go
+    ├── task_repository.go
+    └── asset_repository.go
+
+deploy/compose.yml              # PostgreSQL only for now</pre></div>
+              <div class="info-block wide"><h4>Build checklist</h4><div class="checklist">
+                <label class="task"><input type="checkbox"><span>Run PostgreSQL through Docker Compose.</span></label>
+                <label class="task"><input type="checkbox"><span>Write forward-only schema migrations.</span></label>
+                <label class="task"><input type="checkbox"><span>Implement the existing repository interfaces with GORM.</span></label>
+                <label class="task"><input type="checkbox"><span>Add pagination, status filters, and deterministic sorting.</span></label>
+                <label class="task"><input type="checkbox"><span>Store a task and its created event in one transaction.</span></label>
+                <label class="task"><input type="checkbox"><span>Add repository integration tests against PostgreSQL.</span></label>
+                <label class="task"><input type="checkbox"><span>Verify data survives an API restart.</span></label>
+                <label class="task"><input type="checkbox"><span>Inspect generated SQL for one list query.</span></label>
+              </div></div>
+              <div class="info-block wide done-gate"><h4>Definition of done</h4><p>Restarting the API preserves data, all list filters work, and a failed transaction leaves neither a partial task nor a partial audit event.</p></div>
+            </div>
+          </div>
+        </details>
+
+        <details id="phase-6" class="phase" data-phase="6" data-status="not-started">
+          <summary>
+            <span class="phase-number">6</span>
+            <span class="phase-title-wrap"><h3 class="phase-title">Authentication, tenants, and permissions</h3><p class="phase-subtitle">Teach every request who the user is, which tenant owns the data, and what action is allowed.</p><span class="phase-badges"><span class="badge time">5–8 sessions</span><span class="badge">OIDC/JWT</span><span class="badge">RBAC</span><span class="badge">Security</span></span></span>
+            <span class="summary-side"><span class="phase-percent">0%</span><span class="chevron" aria-hidden="true"></span></span>
+          </summary>
+          <div class="phase-body">
+            <div class="phase-toolbar"><strong>Outcome: tenant A can never read or mutate tenant B’s records.</strong><label class="status-group">Status <select class="status-select"><option value="not-started">Not started</option><option value="learning">Learning</option><option value="building">Building</option><option value="testing">Testing</option><option value="completed">Completed</option><option value="blocked">Blocked</option></select></label></div>
+            <div class="phase-grid">
+              <div class="info-block"><h4>Purpose</h4><p>Reproduce the protected-route chain used throughout Governata: authenticate, resolve tenant, authorize permission, then run business logic.</p></div>
+              <div class="info-block"><h4>Product increment</h4><p>Login, current-user display, viewer/steward/admin roles, tenant-scoped queries, permission-aware buttons, and 401/403 handling.</p></div>
+              <div class="info-block wide"><h4>Concepts</h4><div class="learn-vs-master"><div class="learn-card"><strong>Learn now</strong>OIDC, JWT claims, middleware ordering, context values, RBAC, fail-closed checks, tenant query scoping, frontend route guards.</div><div class="master-card"><strong>Master by the gate</strong>Prove authorization in the backend even when the frontend hides controls.</div></div></div>
+              <div class="info-block wide"><h4>Required middleware order</h4><pre>request ID → recovery → authentication → tenant resolution
+→ permission check → handler → service → tenant-scoped repository</pre></div>
+              <div class="info-block wide"><h4>Build checklist</h4><div class="checklist">
+                <label class="task"><input type="checkbox"><span>Add a local OIDC provider or test JWT issuer.</span></label>
+                <label class="task"><input type="checkbox"><span>Validate issuer, audience, signature, and expiry.</span></label>
+                <label class="task"><input type="checkbox"><span>Put typed user and tenant identity into request context.</span></label>
+                <label class="task"><input type="checkbox"><span>Require permissions on mutation routes.</span></label>
+                <label class="task"><input type="checkbox"><span>Scope every repository query by tenant ID.</span></label>
+                <label class="task"><input type="checkbox"><span>Add cross-tenant attack tests.</span></label>
+                <label class="task"><input type="checkbox"><span>Render friendly 401 and 403 frontend states.</span></label>
+                <label class="task"><input type="checkbox"><span>Record actor ID on every governed mutation.</span></label>
+              </div></div>
+              <div class="info-block wide done-gate"><h4>Definition of done</h4><p>Automated tests prove cross-tenant reads and writes fail. Changing a role changes both visible UI actions and backend authorization.</p></div>
+            </div>
+          </div>
+        </details>
+
+        <details id="phase-7" class="phase" data-phase="7" data-status="not-started">
+          <summary>
+            <span class="phase-number">7</span>
+            <span class="phase-title-wrap"><h3 class="phase-title">Workflow engine, audit trail, and SLA</h3><p class="phase-subtitle">Turn CRUD into governed business behavior.</p><span class="phase-badges"><span class="badge time">5–7 sessions</span><span class="badge">State machine</span><span class="badge">Audit</span><span class="badge">Time</span></span></span>
+            <span class="summary-side"><span class="phase-percent">0%</span><span class="chevron" aria-hidden="true"></span></span>
+          </summary>
+          <div class="phase-body">
+            <div class="phase-toolbar"><strong>Outcome: every task change is legal, attributable, and explainable.</strong><label class="status-group">Status <select class="status-select"><option value="not-started">Not started</option><option value="learning">Learning</option><option value="building">Building</option><option value="testing">Testing</option><option value="completed">Completed</option><option value="blocked">Blocked</option></select></label></div>
+            <div class="phase-grid">
+              <div class="info-block"><h4>Purpose</h4><p>Model the Governance task engine: controlled transitions, task templates, immutable history, due times, SLA breaches, comments, assignment, and escalation.</p></div>
+              <div class="info-block"><h4>Product increment</h4><p>Timeline UI, allowed-action buttons, SLA badges, “My tasks,” overdue filters, task templates, and bulk assignment.</p></div>
+              <div class="info-block wide"><h4>Concepts</h4><div class="learn-vs-master"><div class="learn-card"><strong>Learn now</strong>State-machine tables, domain errors, clocks as dependencies, immutable events, atomic writes, background tickers, cancellation with context.</div><div class="master-card"><strong>Master by the gate</strong>Keep invariants in the workflow service so every entry point follows the same rules.</div></div></div>
+              <div class="info-block wide"><h4>Build checklist</h4><div class="checklist">
+                <label class="task"><input type="checkbox"><span>Define the transition matrix and valid-next-status endpoint.</span></label>
+                <label class="task"><input type="checkbox"><span>Write an audit event for every mutation.</span></label>
+                <label class="task"><input type="checkbox"><span>Inject a clock so time-based tests stay deterministic.</span></label>
+                <label class="task"><input type="checkbox"><span>Calculate SLA due times and overdue state.</span></label>
+                <label class="task"><input type="checkbox"><span>Add a cancellable background SLA scanner.</span></label>
+                <label class="task"><input type="checkbox"><span>Render audit timeline and permitted actions in React.</span></label>
+                <label class="task"><input type="checkbox"><span>Test every allowed and rejected transition.</span></label>
+                <label class="task"><input type="checkbox"><span>Test graceful worker shutdown.</span></label>
+              </div></div>
+              <div class="info-block wide done-gate"><h4>Definition of done</h4><p>The UI only offers legal transitions, the API rejects illegal ones anyway, and the audit timeline can reconstruct the entire task history.</p></div>
+            </div>
+          </div>
+        </details>
+
+        <details id="phase-8" class="phase" data-phase="8" data-status="not-started">
+          <summary>
+            <span class="phase-number">8</span>
+            <span class="phase-title-wrap"><h3 class="phase-title">Split Core and Governance with NATS</h3><p class="phase-subtitle">Introduce a service boundary only after the monolith is understood.</p><span class="phase-badges"><span class="badge time">6–9 sessions</span><span class="badge">NATS</span><span class="badge">Events</span><span class="badge">Service isolation</span></span></span>
+            <span class="summary-side"><span class="phase-percent">0%</span><span class="chevron" aria-hidden="true"></span></span>
+          </summary>
+          <div class="phase-body">
+            <div class="phase-toolbar"><strong>Outcome: Core owns assets; Governance consumes and annotates them.</strong><label class="status-group">Status <select class="status-select"><option value="not-started">Not started</option><option value="learning">Learning</option><option value="building">Building</option><option value="testing">Testing</option><option value="completed">Completed</option><option value="blocked">Blocked</option></select></label></div>
+            <div class="phase-grid">
+              <div class="info-block"><h4>Purpose</h4><p>Understand Governata’s “modules are islands” rule. Core owns the canonical asset. Governance stores its projection and business annotations, linked by <code>platform_asset_id</code>.</p></div>
+              <div class="info-block"><h4>Product increment</h4><p>A new Core service creates assets. Governance receives asset-created events and automatically creates its local projection.</p></div>
+              <div class="info-block wide"><h4>Concepts</h4><div class="learn-vs-master"><div class="learn-card"><strong>Learn now</strong>NATS subjects, publish/subscribe, request-reply, JetStream consumers, durable names, queue groups, event envelopes, correlation IDs, eventual consistency.</div><div class="master-card"><strong>Master by the gate</strong>Trace publisher → subject → stream → durable consumer → local projection.</div></div></div>
+              <div class="info-block wide"><h4>Target structure</h4><pre>services/
+├── core/
+│   ├── cmd/api/main.go
+│   ├── internal/assets/
+│   └── migrations/
+├── governance/
+│   ├── cmd/api/main.go
+│   ├── cmd/worker/main.go
+│   ├── internal/projection/
+│   └── migrations/
+└── shared-sdk/
+    ├── subjects/
+    └── messaging/</pre></div>
+              <div class="info-block warning"><h4>New term</h4><p><strong>Eventual consistency</strong> means the source changes first and other views catch up shortly afterward. The UI must represent “processing” rather than pretending all services update atomically.</p></div>
+              <div class="info-block"><h4>Ownership rule</h4><p>No cross-service database joins, no Governance writes to Core tables, and no copied subject strings outside the shared registry.</p></div>
+              <div class="info-block wide"><h4>Build checklist</h4><div class="checklist">
+                <label class="task"><input type="checkbox"><span>Extract canonical asset ownership into Core.</span></label>
+                <label class="task"><input type="checkbox"><span>Create a shared subject and event-envelope package.</span></label>
+                <label class="task"><input type="checkbox"><span>Publish asset-created and asset-updated events.</span></label>
+                <label class="task"><input type="checkbox"><span>Create a durable Governance projection consumer.</span></label>
+                <label class="task"><input type="checkbox"><span>Propagate tenant, event, correlation, and actor IDs.</span></label>
+                <label class="task"><input type="checkbox"><span>Add a processing state for delayed projections.</span></label>
+                <label class="task"><input type="checkbox"><span>Test redelivery and service restart behavior.</span></label>
+                <label class="task"><input type="checkbox"><span>Document ownership of every table and event.</span></label>
+              </div></div>
+              <div class="info-block wide done-gate"><h4>Definition of done</h4><p>Creating an asset in Core causes a Governance projection without direct database access or backend-to-backend HTTP.</p></div>
+            </div>
+          </div>
+        </details>
+
+        <details id="phase-9" class="phase" data-phase="9" data-status="not-started">
+          <summary>
+            <span class="phase-number">9</span>
+            <span class="phase-title-wrap"><h3 class="phase-title">Reliable events: outbox, idempotency, and retries</h3><p class="phase-subtitle">Make message delivery safe when processes crash or messages arrive twice.</p><span class="phase-badges"><span class="badge time">5–8 sessions</span><span class="badge">Outbox</span><span class="badge">Idempotency</span><span class="badge">Workers</span></span></span>
+            <span class="summary-side"><span class="phase-percent">0%</span><span class="chevron" aria-hidden="true"></span></span>
+          </summary>
+          <div class="phase-body">
+            <div class="phase-toolbar"><strong>Outcome: crashes and duplicate delivery do not lose or duplicate business effects.</strong><label class="status-group">Status <select class="status-select"><option value="not-started">Not started</option><option value="learning">Learning</option><option value="building">Building</option><option value="testing">Testing</option><option value="completed">Completed</option><option value="blocked">Blocked</option></select></label></div>
+            <div class="phase-grid">
+              <div class="info-block"><h4>Purpose</h4><p>A database write can succeed while event publication fails. The outbox pattern writes the business change and pending event in one transaction, then a relay publishes later.</p></div>
+              <div class="info-block"><h4>Product increment</h4><p>Durable publication, duplicate-safe consumers, retries with backoff, dead-letter handling, and an operations screen for failed messages.</p></div>
+              <div class="info-block wide"><h4>Concepts</h4><div class="learn-vs-master"><div class="learn-card"><strong>Learn now</strong>Outbox/inbox tables, idempotency keys, at-least-once delivery, retry backoff, dead-letter queues, worker pools, goroutines, channels, select, context cancellation.</div><div class="master-card"><strong>Master by the gate</strong>Design handlers so processing the same event twice produces the same final state.</div></div></div>
+              <div class="info-block wide"><h4>Build checklist</h4><div class="checklist">
+                <label class="task"><input type="checkbox"><span>Write asset change and outbox row in one transaction.</span></label>
+                <label class="task"><input type="checkbox"><span>Build a bounded, cancellable outbox relay.</span></label>
+                <label class="task"><input type="checkbox"><span>Lock batches safely for multiple relay replicas.</span></label>
+                <label class="task"><input type="checkbox"><span>Record processed event IDs per tenant.</span></label>
+                <label class="task"><input type="checkbox"><span>Acknowledge only after durable processing succeeds.</span></label>
+                <label class="task"><input type="checkbox"><span>Add retry limits and a dead-letter path.</span></label>
+                <label class="task"><input type="checkbox"><span>Crash the relay between write and publish in a test.</span></label>
+                <label class="task"><input type="checkbox"><span>Deliver one event twice and prove only one effect occurs.</span></label>
+              </div></div>
+              <div class="info-block wide done-gate"><h4>Definition of done</h4><p>Automated failure tests prove no event is lost after a crash and duplicate delivery creates no duplicate projection or task.</p></div>
+            </div>
+          </div>
+        </details>
+
+        <details id="phase-10" class="phase" data-phase="10" data-status="not-started">
+          <summary>
+            <span class="phase-number">10</span>
+            <span class="phase-title-wrap"><h3 class="phase-title">Policies with CEL</h3><p class="phase-subtitle">Let users express governance rules without compiling Go code.</p><span class="phase-badges"><span class="badge time">4–6 sessions</span><span class="badge">CEL</span><span class="badge">Validation</span><span class="badge">Policy engine</span></span></span>
+            <span class="summary-side"><span class="phase-percent">0%</span><span class="chevron" aria-hidden="true"></span></span>
+          </summary>
+          <div class="phase-body">
+            <div class="phase-toolbar"><strong>Outcome: policies can be drafted, validated, published, and evaluated.</strong><label class="status-group">Status <select class="status-select"><option value="not-started">Not started</option><option value="learning">Learning</option><option value="building">Building</option><option value="testing">Testing</option><option value="completed">Completed</option><option value="blocked">Blocked</option></select></label></div>
+            <div class="phase-grid">
+              <div class="info-block"><h4>Purpose</h4><p>Recreate Governata’s policy-engine pattern using Common Expression Language, a safe expression language for evaluating rules against structured context.</p></div>
+              <div class="info-block"><h4>Example rule</h4><pre>asset.sensitivity == "restricted"
+  ? user.role in ["steward", "admin"]
+  : true</pre></div>
+              <div class="info-block wide"><h4>Concepts</h4><div class="learn-vs-master"><div class="learn-card"><strong>Learn now</strong>Parse/compile/evaluate lifecycle, typed environments, validation diagnostics, policy versioning, draft/published/retired states, safe evaluation limits.</div><div class="master-card"><strong>Master by the gate</strong>Keep user expressions constrained, validated, versioned, and auditable.</div></div></div>
+              <div class="info-block wide"><h4>Build checklist</h4><div class="checklist">
+                <label class="task"><input type="checkbox"><span>Create policy CRUD and lifecycle states.</span></label>
+                <label class="task"><input type="checkbox"><span>Compile CEL during validation and before publication.</span></label>
+                <label class="task"><input type="checkbox"><span>Define a small typed evaluation context.</span></label>
+                <label class="task"><input type="checkbox"><span>Return readable line/column diagnostics to React.</span></label>
+                <label class="task"><input type="checkbox"><span>Store immutable policy versions.</span></label>
+                <label class="task"><input type="checkbox"><span>Record evaluation input digest, result, and policy version.</span></label>
+                <label class="task"><input type="checkbox"><span>Add a frontend policy tester.</span></label>
+                <label class="task"><input type="checkbox"><span>Test valid, invalid, missing-field, and type-error expressions.</span></label>
+              </div></div>
+              <div class="info-block wide done-gate"><h4>Definition of done</h4><p>A user can safely test and publish a policy, and every evaluation states which immutable version produced the result.</p></div>
+            </div>
+          </div>
+        </details>
+
+        <details id="phase-11" class="phase" data-phase="11" data-status="not-started">
+          <summary>
+            <span class="phase-number">11</span>
+            <span class="phase-title-wrap"><h3 class="phase-title">Redis, evidence files, and background work</h3><p class="phase-subtitle">Add cache and object storage where relational storage is not the right tool.</p><span class="phase-badges"><span class="badge time">5–8 sessions</span><span class="badge">Valkey/Redis</span><span class="badge">MinIO</span><span class="badge">Concurrency</span></span></span>
+            <span class="summary-side"><span class="phase-percent">0%</span><span class="chevron" aria-hidden="true"></span></span>
+          </summary>
+          <div class="phase-body">
+            <div class="phase-toolbar"><strong>Outcome: users attach evidence and workers process it safely.</strong><label class="status-group">Status <select class="status-select"><option value="not-started">Not started</option><option value="learning">Learning</option><option value="building">Building</option><option value="testing">Testing</option><option value="completed">Completed</option><option value="blocked">Blocked</option></select></label></div>
+            <div class="phase-grid">
+              <div class="info-block"><h4>Purpose</h4><p>Store file bytes in MinIO, file metadata in PostgreSQL, and short-lived computed results in Redis/Valkey. Use workers for expensive processing.</p></div>
+              <div class="info-block"><h4>Product increment</h4><p>Evidence upload/download, presigned URLs, checksums, a cached dashboard summary, file-processing jobs, and progress display.</p></div>
+              <div class="info-block wide"><h4>Concepts</h4><div class="learn-vs-master"><div class="learn-card"><strong>Learn now</strong>Multipart upload, streams, checksums, S3-compatible APIs, presigned URLs, cache-aside, TTL, invalidation, distributed locks, bounded worker concurrency.</div><div class="master-card"><strong>Master by the gate</strong>Choose PostgreSQL, object storage, or cache based on ownership and durability needs.</div></div></div>
+              <div class="info-block warning"><h4>Security focus</h4><p>Limit file size, sanitize names, verify content type, isolate tenant object keys, never trust client checksums, and keep presigned URLs short-lived.</p></div>
+              <div class="info-block"><h4>Reliability focus</h4><p>A cache miss must be correct, only slower. A failed file job must be retryable without creating duplicate metadata.</p></div>
+              <div class="info-block wide"><h4>Build checklist</h4><div class="checklist">
+                <label class="task"><input type="checkbox"><span>Add MinIO and Valkey to Compose.</span></label>
+                <label class="task"><input type="checkbox"><span>Stream uploads while enforcing a size limit.</span></label>
+                <label class="task"><input type="checkbox"><span>Store evidence metadata and SHA-256 checksum in PostgreSQL.</span></label>
+                <label class="task"><input type="checkbox"><span>Generate tenant-scoped presigned download URLs.</span></label>
+                <label class="task"><input type="checkbox"><span>Cache dashboard counts with explicit TTL and invalidation.</span></label>
+                <label class="task"><input type="checkbox"><span>Process evidence jobs with a bounded worker pool.</span></label>
+                <label class="task"><input type="checkbox"><span>Test cache outage and object-store outage behavior.</span></label>
+                <label class="task"><input type="checkbox"><span>Render upload and processing progress in React.</span></label>
+              </div></div>
+              <div class="info-block wide done-gate"><h4>Definition of done</h4><p>Files are tenant-isolated, metadata remains correct after retries, and disabling Redis affects speed rather than correctness.</p></div>
+            </div>
+          </div>
+        </details>
+
+        <details id="phase-12" class="phase" data-phase="12" data-status="not-started">
+          <summary>
+            <span class="phase-number">12</span>
+            <span class="phase-title-wrap"><h3 class="phase-title">Observability, packaging, and production proof</h3><p class="phase-subtitle">Make the system diagnosable, repeatable, and comparable to Governata.</p><span class="phase-badges"><span class="badge time">6–10 sessions</span><span class="badge">OpenTelemetry</span><span class="badge">Prometheus</span><span class="badge">Docker</span></span></span>
+            <span class="summary-side"><span class="phase-percent">0%</span><span class="chevron" aria-hidden="true"></span></span>
+          </summary>
+          <div class="phase-body">
+            <div class="phase-toolbar"><strong>Outcome: one command starts a diagnosable Mini Governata stack.</strong><label class="status-group">Status <select class="status-select"><option value="not-started">Not started</option><option value="learning">Learning</option><option value="building">Building</option><option value="testing">Testing</option><option value="completed">Completed</option><option value="blocked">Blocked</option></select></label></div>
+            <div class="phase-grid">
+              <div class="info-block"><h4>Purpose</h4><p>Learn to answer: Is it alive? Is it ready? Which request failed? Which service was slow? Which message caused this worker action?</p></div>
+              <div class="info-block"><h4>Product increment</h4><p>Structured logs, metrics, distributed traces, health/readiness checks, dashboards, container builds, configuration validation, and end-to-end tests.</p></div>
+              <div class="info-block wide"><h4>Concepts</h4><div class="learn-vs-master"><div class="learn-card"><strong>Learn now</strong>Structured logging, log fields, RED metrics, trace/span context, health vs readiness, config validation, signals, graceful shutdown, Docker networks, build metadata.</div><div class="master-card"><strong>Master by the gate</strong>Follow one trace from React HTTP request through Go and NATS into a worker.</div></div></div>
+              <div class="info-block wide"><h4>Final stack</h4><pre>React web  →  Core API  →  PostgreSQL
+                 │
+                 └─ NATS JetStream → Governance worker
+                                      │
+Governance API → PostgreSQL           ├─ MinIO
+       │                              └─ Valkey
+       └──────── OpenTelemetry ─────────→ Collector
+                       ├─ Prometheus / Grafana
+                       └─ trace backend</pre></div>
+              <div class="info-block wide"><h4>Build checklist</h4><div class="checklist">
+                <label class="task"><input type="checkbox"><span>Add JSON logs with request, tenant, user, event, and trace IDs.</span></label>
+                <label class="task"><input type="checkbox"><span>Expose health, readiness, and Prometheus metrics.</span></label>
+                <label class="task"><input type="checkbox"><span>Propagate OpenTelemetry context through HTTP and NATS.</span></label>
+                <label class="task"><input type="checkbox"><span>Add service latency, error, and worker-lag dashboards.</span></label>
+                <label class="task"><input type="checkbox"><span>Validate required configuration before startup.</span></label>
+                <label class="task"><input type="checkbox"><span>Handle SIGTERM and drain HTTP/workers cleanly.</span></label>
+                <label class="task"><input type="checkbox"><span>Create reproducible multi-stage container builds.</span></label>
+                <label class="task"><input type="checkbox"><span>Run unit, integration, contract, and end-to-end suites.</span></label>
+                <label class="task"><input type="checkbox"><span>Break NATS, database, Redis, and MinIO one at a time.</span></label>
+                <label class="task"><input type="checkbox"><span>Write a runbook for each observed failure mode.</span></label>
+              </div></div>
+              <div class="info-block wide done-gate"><h4>Definition of done</h4><p>A fresh machine can start the stack from documented commands, tests prove critical flows, and logs plus traces identify intentional failures without adding debug prints.</p></div>
+            </div>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <section class="panel" style="margin-top:2.5rem" aria-labelledby="mastery-heading">
+      <p class="section-kicker">Final mastery map</p>
+      <h2 id="mastery-heading">How the phases connect back to Governata</h2>
+      <div style="overflow-x:auto">
+        <table class="reference-table">
+          <thead><tr><th>Your phase</th><th>Governata pattern</th><th>Representative code area</th></tr></thead>
+          <tbody>
+            <tr><td>1–3</td><td>React Query → typed client → Gin</td><td><code>governance/frontend/src</code> and <code>backend/pkg/governance/api</code></td></tr>
+            <tr><td>4</td><td>Constructor wiring and interfaces</td><td><code>cmd/governance/main.go</code> and <code>api/router.go</code></td></tr>
+            <tr><td>5</td><td>GORM repositories and SQL migrations</td><td><code>store/pg</code> and <code>backend/migrations</code></td></tr>
+            <tr><td>6</td><td>Auth → tenant → license → feature/permission middleware</td><td><code>api/router.go</code> and shared SDK middleware</td></tr>
+            <tr><td>7</td><td>Task workflow and SLA engine</td><td><code>workflow/engine.go</code> and <code>handlers/tasks.go</code></td></tr>
+            <tr><td>8–9</td><td>NATS nervous system, projections, outbox, idempotency</td><td>Core outbox, shared SDK subjects, module consumers</td></tr>
+            <tr><td>10</td><td>CEL policy evaluation</td><td><code>pkg/governance/policy</code></td></tr>
+            <tr><td>11</td><td>Valkey cache and MinIO evidence</td><td><code>store/redis</code>, <code>store/minio</code>, evidence handlers</td></tr>
+            <tr><td>12</td><td>Workers, metrics, tracing, runtime roles</td><td><code>cmd/governance</code>, observability, runtime Compose</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="intro-grid" style="margin-top:1.2rem">
+      <article class="panel">
+        <p class="section-kicker">The repeatable study loop</p>
+        <h2 id="study-loop-heading" style="font-size:2rem">Use this for every feature.</h2>
+        <ol>
+          <li>Predict the execution path before opening code.</li>
+          <li>Run the smallest test or request that proves the behavior.</li>
+          <li>Trace component → client → route → handler → service → store → event.</li>
+          <li>Change one rule and update its closest test first.</li>
+          <li>Break one dependency and observe the failure state.</li>
+          <li>Explain the flow aloud without the editor.</li>
+        </ol>
+      </article>
+      <article class="panel">
+        <p class="section-kicker">Pacing</p>
+        <h2 style="font-size:2rem">Move by evidence, not dates.</h2>
+        <p>Session estimates are guides, not deadlines. Do not advance because a week ended. Advance when the definition-of-done gate is true.</p>
+        <p class="muted">If a phase becomes frustrating, shrink the current task until it produces a visible result in one sitting. Never respond by adding another framework.</p>
+        <button class="button" type="button" onclick="window.print()">Print or save as PDF</button>
+      </article>
+    </section>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <p><strong>Mini Governata</strong> is not a throwaway tutorial. It is your controlled laboratory for understanding the production platform.</p>
+    <small>Roadmap state is stored only in this browser using localStorage.</small>
+  </footer>
+
+  <script>
+    (() => {
+      const STORAGE_KEY = 'mini-governata-roadmap-v1';
+      const phases = [...document.querySelectorAll('.phase')];
+      const phaseGuideFolders = [
+        'phase-00-orientation', 'phase-01-frontend', 'phase-02-go-foundations',
+        'phase-03-go-api', 'phase-04-interfaces', 'phase-05-postgres-gorm',
+        'phase-06-auth-tenancy', 'phase-07-workflow-audit', 'phase-08-nats-services',
+        'phase-09-reliable-events', 'phase-10-cel-policies', 'phase-11-storage-workers',
+        'phase-12-production'
+      ];
+      const search = document.querySelector('#search');
+      const statusFilter = document.querySelector('#status-filter');
+      const indexLinks = [...document.querySelectorAll('.index-link')];
+      const fill = document.querySelector('.progress-fill');
+      const number = document.querySelector('.progress-number');
+      const progressbar = document.querySelector('[role="progressbar"]');
+
+      phases.forEach((phase) => {
+        const link = document.createElement('a');
+        link.className = 'button course';
+        link.href = `mini-governata-course/${phaseGuideFolders[Number(phase.dataset.phase)]}/index.html`;
+        link.textContent = 'Study this phase →';
+        phase.querySelector('.phase-toolbar .status-group').before(link);
+      });
+
+      const load = () => {
+        try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); }
+        catch { return {}; }
+      };
+
+      const save = () => {
+        const state = {};
+        phases.forEach((phase) => {
+          state[phase.dataset.phase] = {
+            status: phase.dataset.status,
+            open: phase.open,
+            tasks: [...phase.querySelectorAll('.task input')].map((input) => input.checked),
+          };
+        });
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      };
+
+      const phaseProgress = (phase) => {
+        const tasks = [...phase.querySelectorAll('.task input')];
+        if (!tasks.length) return phase.dataset.status === 'completed' ? 100 : 0;
+        return Math.round(tasks.filter((task) => task.checked).length / tasks.length * 100);
+      };
+
+      const renderProgress = () => {
+        let checked = 0;
+        let total = 0;
+        phases.forEach((phase) => {
+          const tasks = [...phase.querySelectorAll('.task input')];
+          checked += tasks.filter((task) => task.checked).length;
+          total += tasks.length;
+          const value = phaseProgress(phase);
+          phase.querySelector('.phase-percent').textContent = `${value}%`;
+          const indexLink = document.querySelector(`[data-index-phase="${phase.dataset.phase}"]`);
+          if (indexLink) {
+            indexLink.dataset.status = phase.dataset.status;
+            indexLink.querySelector('.index-percent').textContent = `${value}%`;
+          }
+        });
+        const value = total ? Math.round(checked / total * 100) : 0;
+        fill.style.width = `${value}%`;
+        number.textContent = `${value}%`;
+        progressbar.setAttribute('aria-valuenow', String(value));
+      };
+
+      const applyFilters = () => {
+        const query = search.value.trim().toLowerCase();
+        const wantedStatus = statusFilter.value;
+        phases.forEach((phase) => {
+          const matchesText = !query || phase.textContent.toLowerCase().includes(query);
+          const matchesStatus = wantedStatus === 'all' || phase.dataset.status === wantedStatus;
+          phase.hidden = !(matchesText && matchesStatus);
+        });
+      };
+
+      const state = load();
+      phases.forEach((phase) => {
+        const saved = state[phase.dataset.phase];
+        const select = phase.querySelector('.status-select');
+        if (saved) {
+          phase.dataset.status = saved.status || 'not-started';
+          select.value = phase.dataset.status;
+          phase.open = Boolean(saved.open);
+          [...phase.querySelectorAll('.task input')].forEach((input, index) => {
+            input.checked = Boolean(saved.tasks?.[index]);
+          });
+        }
+
+        select.addEventListener('change', (event) => {
+          phase.dataset.status = event.target.value;
+          if (event.target.value === 'completed') {
+            phase.querySelectorAll('.task input').forEach((input) => { input.checked = true; });
+          }
+          renderProgress();
+          applyFilters();
+          save();
+        });
+        phase.querySelectorAll('.task input').forEach((input) => {
+          input.addEventListener('change', () => {
+            const progress = phaseProgress(phase);
+            if (progress === 100) {
+              phase.dataset.status = 'completed';
+              select.value = 'completed';
+            } else if (phase.dataset.status === 'completed') {
+              phase.dataset.status = 'building';
+              select.value = 'building';
+            }
+            renderProgress();
+            save();
+          });
+        });
+        phase.addEventListener('toggle', save);
+      });
+
+      search.addEventListener('input', applyFilters);
+      statusFilter.addEventListener('change', applyFilters);
+      indexLinks.forEach((link) => {
+        link.addEventListener('click', (event) => {
+          event.preventDefault();
+          const phase = document.querySelector(`#phase-${link.dataset.indexPhase}`);
+          if (!phase) return;
+          phase.open = true;
+          history.replaceState(null, '', `#${phase.id}`);
+          requestAnimationFrame(() => phase.scrollIntoView({ block: 'start' }));
+        });
+      });
+
+      if ('IntersectionObserver' in window) {
+        const observer = new IntersectionObserver((entries) => {
+          const visible = entries
+            .filter((entry) => entry.isIntersecting)
+            .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+          if (!visible) return;
+          indexLinks.forEach((link) => {
+            const active = link.dataset.indexPhase === visible.target.dataset.phase;
+            link.classList.toggle('active', active);
+            if (active) link.setAttribute('aria-current', 'location');
+            else link.removeAttribute('aria-current');
+          });
+        }, { rootMargin: '-18% 0px -68% 0px', threshold: 0 });
+        phases.forEach((phase) => observer.observe(phase));
+      }
+
+      if (location.hash.startsWith('#phase-')) {
+        const linkedPhase = document.querySelector(location.hash);
+        if (linkedPhase?.classList.contains('phase')) linkedPhase.open = true;
+      }
+
+      document.querySelector('#expand-all').addEventListener('click', (event) => {
+        const shouldOpen = phases.some((phase) => !phase.open && !phase.hidden);
+        phases.filter((phase) => !phase.hidden).forEach((phase) => { phase.open = shouldOpen; });
+        event.currentTarget.textContent = shouldOpen ? 'Collapse all' : 'Expand all';
+        save();
+      });
+      document.querySelector('#reset-progress').addEventListener('click', () => {
+        if (!window.confirm('Reset every phase status and checklist item?')) return;
+        localStorage.removeItem(STORAGE_KEY);
+        phases.forEach((phase, index) => {
+          phase.dataset.status = 'not-started';
+          phase.querySelector('.status-select').value = 'not-started';
+          phase.querySelectorAll('.task input').forEach((input) => { input.checked = false; });
+          phase.open = index === 1;
+        });
+        search.value = '';
+        statusFilter.value = 'all';
+        applyFilters();
+        renderProgress();
+      });
+
+      renderProgress();
+      applyFilters();
+    })();
+  </script>
+</body>
+</html>

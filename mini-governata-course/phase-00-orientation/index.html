@@ -1,0 +1,100 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Phase 0 — Orientation & Request Tracing</title><link rel="stylesheet" href="../assets/course.css"></head>
+<body data-root=".." data-phase="0"><div class="course-shell"><aside data-course-nav></aside><main class="course-main"><article class="article">
+<header class="phase-hero"><p class="eyebrow">Phase 0 · Learn before changing code</p><h1>Read Go and trace Governata without getting lost</h1><p class="hero-lede">Build the vocabulary and navigation habits needed to follow one action from a React click through Go, storage, and events. The outcome is not Go mastery yet—it is a reliable mental map.</p><div class="hero-meta"><span class="pill">3–5 sessions</span><span class="pill">No product code required</span><span class="pill" data-phase-progress>Start when ready</span></div></header>
+
+<section class="callout"><h2>Your finish line</h2><p>Given a UI action such as <strong>Complete task</strong>, you can locate its frontend mutation, HTTP route, handler, workflow method, repository/model, migration, and composition root—and explain why Command-click alone cannot reveal every edge.</p></section>
+
+<p class="section-label">Lesson 1</p><h2>How a React + Go system is connected</h2>
+<div class="diagram"><div class="flow"><div class="flow-node"><strong>React event</strong><br>onClick</div><div class="flow-arrow">→</div><div class="flow-node"><strong>API client</strong><br>HTTP request</div><div class="flow-arrow">→</div><div class="flow-node"><strong>Go router</strong><br>method + path</div><div class="flow-arrow">→</div><div class="flow-node"><strong>Handler</strong><br>decode + respond</div><div class="flow-arrow">→</div><div class="flow-node"><strong>Service</strong><br>business rule</div><div class="flow-arrow">→</div><div class="flow-node"><strong>Repository</strong><br>persist</div></div><p class="diagram-caption">Some arrows are function calls; the React→Go edge is an HTTP contract, and service→service edges may be NATS messages. Editors cannot “go to definition” across runtime protocols.</p></div>
+<div class="react-bridge"><div class="bridge-side"><h4>Inside React</h4><p>Imports and function calls form a compile-time graph. The TypeScript language server knows both ends.</p></div><div class="bridge-arrow">≠</div><div class="bridge-side"><h4>Across the network</h4><p><code>fetch("/api/tasks/42/complete")</code> is a string contract. Find the Go route by searching the path or its stable fragment.</p></div></div>
+
+<section class="lesson"><h3>The four edge types you must recognize</h3><table><thead><tr><th>Edge</th><th>How it looks</th><th>How to navigate it</th></tr></thead><tbody>
+<tr><td>Import/call</td><td><code>engine.CompleteTask(...)</code></td><td>Go to definition, references, call hierarchy.</td></tr>
+<tr><td>Interface dispatch</td><td><code>store.Update(...)</code> where <code>store</code> is an interface</td><td>Inspect the interface, search method implementations, then inspect constructor wiring.</td></tr>
+<tr><td>HTTP contract</td><td><code>POST /tasks/:id/complete</code></td><td>Search the path fragment, method, route group, or client function name.</td></tr>
+<tr><td>Message contract</td><td><code>governance.task.completed</code></td><td>Search the subject/event constant, then publishers and subscribers.</td></tr>
+</tbody></table></section>
+
+<p class="section-label">Lesson 2</p><h2>Enough Go syntax to read a request</h2>
+<section class="lesson"><h3>Packages, imports, and visibility</h3><pre><code>package workflow
+
+import (
+    "context"                  // standard library
+    "fmt"
+    "governata.local/store"    // another package
+)
+
+func CompleteTask() {}          // exported: capital C
+func validateTransition() {}    // package-private: lower-case v</code></pre><p>A directory normally represents one package. Capitalization is Go’s access modifier: names starting with an uppercase letter are exported. Unlike JavaScript, imports name packages, and selectors such as <code>workflow.NewEngine</code> name exported members.</p>
+
+<h3>Variables, functions, and multiple returns</h3><pre><code>taskID := c.Param("id")                 // infer local type
+task, err := engine.CompleteTask(ctx, taskID)
+if err != nil {
+    return err                           // errors are values
+}
+return c.JSON(200, task)                 // explicit happy path</code></pre><p><code>:=</code> declares local variables. Go commonly returns a value and an error together. Read the code as a visible decision tree: call, inspect error, handle it, continue.</p>
+
+<h3>Structs, methods, and receivers</h3><pre><code>type Task struct {
+    ID     string `json:"id" gorm:"primaryKey"`
+    Status string `json:"status"`
+}
+
+type Engine struct { store TaskStore }
+
+func (e *Engine) CompleteTask(ctx context.Context, id string) (*Task, error) {
+    // e is the receiver—the closest Go equivalent to a method's `this`.
+    return e.store.UpdateStatus(ctx, id, "completed")
+}</code></pre><p>A struct groups data. A receiver attaches behavior to a type. A pointer receiver (<code>*Engine</code>) lets the method operate on the same instance and avoids copying it. Tags in backticks are metadata read by libraries such as JSON encoders and GORM.</p>
+
+<h3>Slices, maps, pointers, and zero values</h3><table><thead><tr><th>Go</th><th>Useful reading model</th></tr></thead><tbody><tr><td><code>[]Task</code></td><td>A dynamic ordered list; similar to <code>Task[]</code>.</td></tr><tr><td><code>map[string]Task</code></td><td>A key/value lookup; similar to <code>Map&lt;string, Task&gt;</code>.</td></tr><tr><td><code>*Task</code></td><td>A reference that may be <code>nil</code>; not identical to JS object references.</td></tr><tr><td>zero value</td><td>Uninitialized fields are usable defaults: <code>0</code>, <code>false</code>, <code>""</code>, or <code>nil</code>.</td></tr></tbody></table>
+
+<details class="deep-dive"><summary>Deep dive: defer and context</summary><div><p><code>defer cleanup()</code> schedules cleanup when the surrounding function returns; common uses are closing rows, spans, or files. <code>context.Context</code> carries cancellation, deadlines, and request-scoped values across a call chain. Put it first in function parameters and do not store it in a long-lived struct.</p><pre><code>rows, err := db.QueryContext(ctx, query)
+if err != nil { return err }
+defer rows.Close()</code></pre></div></details></section>
+
+<p class="section-label">Lesson 3</p><h2>Interfaces and dependency injection—the invisible jump</h2>
+<section class="lesson"><pre><code>type TaskStore interface {
+    Find(ctx context.Context, id string) (*Task, error)
+    Save(ctx context.Context, task *Task) error
+}
+
+type Engine struct { store TaskStore }
+
+func NewEngine(store TaskStore) *Engine {
+    return &amp;Engine{store: store}
+}</code></pre><p>Go interfaces are implemented implicitly: a type satisfies <code>TaskStore</code> by having those methods. There is no <code>implements</code> keyword for Command-click to follow. To resolve <code>e.store.Save</code>:</p><ol><li>Read the interface to understand the contract.</li><li>Search for <code>func (... ) Save(</code> or use “Go to implementations.”</li><li>Find <code>NewEngine(</code> calls in startup code.</li><li>See which concrete store is passed at runtime.</li></ol>
+<div class="react-bridge"><div class="bridge-side"><h4>React analogy</h4><p>A component receives a callback prop typed as <code>(task) =&gt; Promise&lt;void&gt;</code>. Many functions can satisfy it.</p></div><div class="bridge-arrow">↔</div><div class="bridge-side"><h4>Go</h4><p>An engine receives a narrow <code>TaskStore</code>. PostgreSQL and an in-memory fake can both satisfy it.</p></div></div></section>
+
+<p class="section-label">Lesson 4</p><h2>Routes, handlers, services, repositories, migrations</h2>
+<section class="lesson"><table><thead><tr><th>Layer</th><th>Owns</th><th>Should not own</th></tr></thead><tbody>
+<tr><td>Router/middleware</td><td>Path, HTTP method, auth chain</td><td>Business transitions</td></tr><tr><td>Handler</td><td>Decode/validate input, call service, map result to HTTP</td><td>Raw SQL</td></tr><tr><td>Service/engine</td><td>Business rules, orchestration, transaction intent</td><td>Gin response writing</td></tr><tr><td>Repository/store</td><td>Database operations and persistence mapping</td><td>HTTP status codes</td></tr><tr><td>Migration</td><td>Schema history, constraints, indexes</td><td>Runtime request logic</td></tr></tbody></table>
+<pre><code>protected.POST("/tasks/:id/complete", taskHandler.Complete)
+
+func (h *TaskHandler) Complete(c *gin.Context) {
+    task, err := h.engine.CompleteTask(c.Request.Context(), c.Param("id"))
+    if err != nil { writeError(c, err); return }
+    c.JSON(http.StatusOK, task)
+}</code></pre><p>The router is the HTTP wiring table. The handler translates protocols. The engine protects domain truth. This separation is the backbone of later phases.</p></section>
+
+<p class="section-label">Guided trace</p><h2>Follow “Complete task” through real Governata</h2>
+<section class="lab"><p>Open these local files in order. At every stop, write one sentence: “this layer receives ___, decides ___, and passes ___.”</p><ol>
+<li><a class="file-link" href="/Users/hcsingh/work/rehearsal/governata-governance-module/modules/governance/frontend/src/pages/TasksPage.tsx">React task page</a> — find the complete action.</li>
+<li><a class="file-link" href="/Users/hcsingh/work/rehearsal/governata-governance-module/modules/governance/frontend/src/api/governance.ts">Frontend API client</a> — find the method and HTTP contract.</li>
+<li><a class="file-link" href="/Users/hcsingh/work/rehearsal/governata-governance-module/modules/governance/backend/pkg/governance/api/router.go">Go router</a> — find the route and middleware group.</li>
+<li><a class="file-link" href="/Users/hcsingh/work/rehearsal/governata-governance-module/modules/governance/backend/pkg/governance/api/handlers/tasks.go">Task handler</a> — identify decoding, service call, response.</li>
+<li><a class="file-link" href="/Users/hcsingh/work/rehearsal/governata-governance-module/modules/governance/backend/pkg/governance/workflow/engine.go">Workflow engine</a> — locate completion and transition validation.</li>
+<li><a class="file-link" href="/Users/hcsingh/work/rehearsal/governata-governance-module/modules/governance/backend/pkg/governance/store/pg/tasks.go">PostgreSQL task store</a> — inspect the model and persistence calls.</li>
+<li><a class="file-link" href="/Users/hcsingh/work/rehearsal/governata-governance-module/modules/governance/backend/migrations/001_schema.up.sql">Migration</a> — search for the task table.</li>
+<li><a class="file-link" href="/Users/hcsingh/work/rehearsal/governata-governance-module/modules/governance/backend/cmd/governance/main.go">Composition root</a> — find where dependencies are constructed.</li>
+</ol><div class="callout warning"><strong>Navigation recipe:</strong> for an HTTP gap, search a path fragment such as <code>complete</code>. For an interface gap, search constructor calls and method implementations. For an event gap, search the subject string or constant. For a database gap, search table/model names in migrations.</div></section>
+
+<p class="section-label">Practice</p><h2>Three sessions that build the map</h2>
+<section class="lab"><h3>Session A — Read a tiny Go file</h3><p>Write a 25-line <code>main.go</code> containing a <code>Task</code> struct, <code>Status</code> named type, <code>Complete</code> method, and error for an invalid transition. Predict every value before running it.</p><h3>Session B — Draw the trace</h3><p>Trace Governata’s Complete action using the links above. Mark edges as CALL, HTTP, INTERFACE, DATABASE, or MESSAGE.</p><h3>Session C — Teach it back</h3><p>Without looking, explain why <code>TaskStore.Save</code> may not navigate to PostgreSQL and how startup wiring resolves the concrete type. Then repeat the trace from memory.</p></section>
+
+<section class="lesson"><h2>Common traps</h2><ul class="mistakes"><li>Trying to learn every Go keyword before reading product code.</li><li>Assuming a handler contains the entire feature because it is the HTTP entry point.</li><li>Searching only function names when the connection is a route string or message subject.</li><li>Treating a GORM struct as the whole database contract; migrations and constraints also matter.</li><li>Reading files linearly instead of following a single user-visible behavior.</li></ul></section>
+
+<section class="quiz"><h2>Knowledge check</h2><p><strong>1.</strong> Why can Command-click cross <code>engine.CompleteTask</code> but not reliably cross <code>fetch("/tasks/42/complete")</code>?</p><details class="answer"><summary>Show answer</summary><div>The first is a symbol in the compiled import/type graph. The second is a runtime string contract between processes; connect it by searching the HTTP method and path.</div></details><p><strong>2.</strong> A service field has type <code>TaskStore</code>. Where do you discover the runtime implementation?</p><details class="answer"><summary>Show answer</summary><div>Inspect types implementing the interface, then find the constructor call in the composition root/startup code to see which concrete value is injected.</div></details><p><strong>3.</strong> Where should “a completed task cannot return to pending” live?</p><details class="answer"><summary>Show answer</summary><div>In the domain service/workflow engine so every transport and caller shares the same invariant. The UI may also guide users, but it is not the authority.</div></details></section>
+
+<section class="readiness"><h2>Phase 0 readiness gate</h2><p>Check these honestly. When all are complete, you are ready to build the frontend slice.</p><div class="checklist"><label class="check-item"><input type="checkbox" data-check="p0-1"><span>I can explain packages, exported names, structs, methods, pointers, multiple returns, and explicit error checks.</span></label><label class="check-item"><input type="checkbox" data-check="p0-2"><span>I can distinguish direct calls, interface dispatch, HTTP contracts, database boundaries, and message contracts.</span></label><label class="check-item"><input type="checkbox" data-check="p0-3"><span>I traced Complete task through at least six Governata locations and wrote each layer's responsibility.</span></label><label class="check-item"><input type="checkbox" data-check="p0-4"><span>I can find an interface implementation by inspecting constructor wiring.</span></label><label class="check-item"><input type="checkbox" data-check="p0-5"><span>I can redraw the request flow without looking.</span></label></div><p>When ready, say: <span class="command">I'm done with Phase 0, start Phase 1 learning</span></p></section>
+<footer class="phase-footer"><a class="phase-link" href="../index.html">← Course home</a><a class="phase-link next" href="../phase-01-frontend/index.html">Phase 1: React workspace →</a></footer>
+</article></main></div><script src="../assets/course.js"></script></body></html>

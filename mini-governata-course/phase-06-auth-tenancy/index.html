@@ -1,0 +1,50 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Phase 6 — Authentication, Tenancy & RBAC</title><link rel="stylesheet" href="../assets/course.css"></head><body data-root=".." data-phase="6"><div class="course-shell"><aside data-course-nav></aside><main class="course-main"><article class="article">
+<header class="phase-hero"><p class="eyebrow">Phase 6 · Identity and isolation</p><h1>Know who is acting, where, and whether they may</h1><p class="hero-lede">Add JWT authentication, trusted tenant context, and role-based authorization. Security becomes a chain of explicit checks—not a button hidden in React.</p><div class="hero-meta"><span class="pill">6–10 sessions</span><span class="pill">OIDC/JWT concepts</span><span class="pill">Tenant isolation</span><span class="pill">RBAC</span><span class="pill" data-phase-progress>Start when ready</span></div></header>
+<section class="callout warning"><h2>Security principle</h2><p>The frontend improves experience; the backend enforces authority. Every protected operation must derive identity from a validated token, resolve a trusted tenant, check permission, and scope storage—then audit the decision.</p></section>
+
+<p class="section-label">Vocabulary</p><h2>Authentication is not authorization</h2><section class="lesson"><table><thead><tr><th>Question</th><th>Concept</th><th>Example</th></tr></thead><tbody><tr><td>Who are you?</td><td>Authentication</td><td>Validated token says user <code>u-42</code>.</td></tr><tr><td>Which customer space?</td><td>Tenant resolution</td><td>Membership grants <code>tenant-a</code>.</td></tr><tr><td>May you do this?</td><td>Authorization</td><td><code>governance_editor</code> may complete tasks.</td></tr><tr><td>What happened?</td><td>Audit</td><td>User, tenant, action, target, result, time.</td></tr></tbody></table></section>
+
+<p class="section-label">JWT</p><h2>A signed token is claims, not trust by itself</h2><section class="lesson"><div class="diagram"><div class="flow"><div class="flow-node"><strong>Issuer</strong><br>signs JWT</div><div class="flow-arrow">→</div><div class="flow-node"><strong>Browser</strong><br>sends Bearer token</div><div class="flow-arrow">→</div><div class="flow-node"><strong>API</strong><br>validates</div><div class="flow-arrow">→</div><div class="flow-node"><strong>Principal</strong><br>trusted claims</div></div></div><p>A JWT has header, payload, and signature. The payload is encoded, not encrypted. Validate:</p><ul><li>signature using an allowed algorithm and trusted key;</li><li><code>iss</code> (issuer) and <code>aud</code> (intended audience);</li><li><code>exp</code> and optionally <code>nbf</code>, with small clock skew;</li><li>required subject/identity claims;</li><li>key rotation via key ID/JWKS caching.</li></ul><div class="callout warning">Never accept <code>alg: none</code>, never choose verification behavior from untrusted claims, and never log whole tokens.</div></section>
+
+<p class="section-label">Middleware chain</p><h2>Build trusted context in order</h2><section class="lesson"><div class="diagram"><div class="flow"><div class="flow-node"><strong>Authenticate</strong><br>token → principal</div><div class="flow-arrow">→</div><div class="flow-node"><strong>Resolve tenant</strong><br>verify membership</div><div class="flow-arrow">→</div><div class="flow-node"><strong>Authorize</strong><br>permission check</div><div class="flow-arrow">→</div><div class="flow-node"><strong>Handler</strong><br>use trusted values</div></div></div><pre><code>type Principal struct {
+    UserID string
+    TenantID string
+    Roles []string
+}
+
+func Require(permission Permission) gin.HandlerFunc {
+    return func(c *gin.Context) {
+        p, ok := PrincipalFromContext(c.Request.Context())
+        if !ok { c.AbortWithStatus(http.StatusUnauthorized); return }
+        if !Allows(p.Roles, permission) {
+            c.AbortWithStatus(http.StatusForbidden); return
+        }
+        c.Next()
+    }
+}</code></pre><p>Use private typed context keys. Store a small immutable principal, not request objects or database handles. Do not trust <code>tenantId</code> from a JSON body without verifying the principal’s membership.</p></section>
+
+<p class="section-label">RBAC</p><h2>Roles group permissions; code checks permissions</h2><section class="lesson"><pre><code>const (
+    ViewAssets Permission = "assets:view"
+    CreateTask Permission = "tasks:create"
+    CompleteTask Permission = "tasks:complete"
+)
+
+var grants = map[Role]map[Permission]bool{
+    Viewer: {ViewAssets: true},
+    Editor: {ViewAssets: true, CreateTask: true, CompleteTask: true},
+    Admin:  {ViewAssets: true, CreateTask: true, CompleteTask: true},
+}</code></pre><p>Endpoints ask for a permission, not a hard-coded role name. This lets role composition evolve. Default deny: an unknown role or permission grants nothing. Add ownership/resource checks when roles alone are insufficient.</p><div class="two-col"><div class="mini-card"><h3>401</h3><p>Identity is absent or invalid. Re-authentication may help.</p></div><div class="mini-card"><h3>403</h3><p>Identity is known but lacks authority. Logging in again should not change it.</p></div></div></section>
+
+<p class="section-label">Tenant isolation</p><h2>Defend at multiple layers</h2><section class="lesson"><ol><li><strong>Transport:</strong> trusted middleware resolves tenant membership.</li><li><strong>Application:</strong> tenant ID is a required use-case argument.</li><li><strong>Repository:</strong> every lookup/write filters by tenant.</li><li><strong>Schema:</strong> tenant-aware unique keys and foreign relationships.</li><li><strong>Tests:</strong> cross-tenant IDs return no data and make no changes.</li></ol><pre><code>// Good: impossible to "forget" tenant at call sites.
+FindTask(ctx context.Context, tenantID, taskID string) (*Task, error)
+
+// Dangerous: ID-only lookup can leak across tenants.
+FindTask(ctx context.Context, taskID string) (*Task, error)</code></pre></section>
+
+<p class="section-label">Frontend</p><h2>Guide the user without pretending to secure the API</h2><section class="lesson"><ul><li>Centralize token attachment and 401 handling in the API client.</li><li>Render permissions from a session model to avoid offering impossible actions.</li><li>Still handle 403 because permissions can change or resource rules can differ.</li><li>Avoid long-lived tokens in insecure storage; follow the chosen identity architecture.</li><li>Never embed secrets in Vite environment variables—they ship to the browser.</li></ul></section>
+
+<p class="section-label">Threat rehearsal</p><h2>Test abuse cases, not only roles</h2><section class="lab"><table><thead><tr><th>Attempt</th><th>Expected</th></tr></thead><tbody><tr><td>No/expired/bad-signature token</td><td>401 before handler</td></tr><tr><td>Viewer completes task</td><td>403, no write</td></tr><tr><td>User changes body tenant ID</td><td>Ignored/rejected; trusted tenant wins</td></tr><tr><td>User requests another tenant’s task ID</td><td>404-style non-disclosure, no data leak</td></tr><tr><td>Unknown role</td><td>Deny by default</td></tr></tbody></table></section>
+
+<section class="quiz"><h2>Knowledge check</h2><p><strong>1.</strong> Does decoding a JWT validate it?</p><details class="answer"><summary>Show answer</summary><div>No. Anyone can encode claims. Trust requires signature, issuer, audience, time, and algorithm validation.</div></details><p><strong>2.</strong> Why permission checks instead of role checks at endpoints?</p><details class="answer"><summary>Show answer</summary><div>Permissions express required capability; role-to-permission composition can change without rewriting endpoint policy.</div></details><p><strong>3.</strong> Why might cross-tenant access return 404?</p><details class="answer"><summary>Show answer</summary><div>It avoids revealing that a resource exists in another tenant while still denying access.</div></details></section>
+<section class="readiness"><h2>Phase 6 readiness gate</h2><div class="checklist"><label class="check-item"><input type="checkbox" data-check="p6-1"><span>JWT validation checks signature, allowed algorithm, issuer, audience, and time claims.</span></label><label class="check-item"><input type="checkbox" data-check="p6-2"><span>Middleware constructs a trusted principal before permission checks.</span></label><label class="check-item"><input type="checkbox" data-check="p6-3"><span>Unknown roles/permissions deny by default and 401/403 are correct.</span></label><label class="check-item"><input type="checkbox" data-check="p6-4"><span>Tenant scope is required at application, repository, schema, and test layers.</span></label><label class="check-item"><input type="checkbox" data-check="p6-5"><span>Abuse tests prove no cross-tenant read/write or hidden-button reliance.</span></label></div><p>Next: <span class="command">I'm done with Phase 6, start Phase 7 learning</span></p></section>
+<footer class="phase-footer"><a class="phase-link" href="../phase-05-postgres-gorm/index.html">← Phase 5</a><a class="phase-link next" href="../phase-07-workflow-audit/index.html">Phase 7: Workflow →</a></footer></article></main></div><script src="../assets/course.js"></script></body></html>

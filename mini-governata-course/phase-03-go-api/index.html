@@ -1,0 +1,67 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Phase 3 — Go HTTP API</title><link rel="stylesheet" href="../assets/course.css"></head><body data-root=".." data-phase="3"><div class="course-shell"><aside data-course-nav></aside><main class="course-main"><article class="article">
+<header class="phase-hero"><p class="eyebrow">Phase 3 · Replace the mock boundary</p><h1>Serve the task domain through a real Go API</h1><p class="hero-lede">Keep Phase 1’s frontend contract, replace MSW with Gin handlers, and learn how a request is decoded, validated, executed, encoded, cancelled, tested, and shut down.</p><div class="hero-meta"><span class="pill">5–8 sessions</span><span class="pill">Gin</span><span class="pill">net/http + httptest</span><span class="pill" data-phase-progress>Start when ready</span></div></header>
+<section class="callout"><h2>What you will build</h2><p>A Go service exposing asset and task endpoints from memory. The React app talks to it through the same API client. Errors have a consistent JSON shape, CORS is limited to the frontend origin, and handler tests run without opening a real port.</p></section>
+
+<p class="section-label">Protocol model</p><h2>HTTP is a contract, not a function call</h2><section class="lesson"><table><thead><tr><th>Operation</th><th>Method + path</th><th>Success</th></tr></thead><tbody><tr><td>List assets</td><td><code>GET /api/v1/assets</code></td><td><code>200</code> array</td></tr><tr><td>Get asset</td><td><code>GET /api/v1/assets/:id</code></td><td><code>200</code> object</td></tr><tr><td>Create task</td><td><code>POST /api/v1/tasks</code></td><td><code>201</code> object</td></tr><tr><td>Start task</td><td><code>POST /api/v1/tasks/:id/start</code></td><td><code>200</code> object</td></tr><tr><td>Complete task</td><td><code>POST /api/v1/tasks/:id/complete</code></td><td><code>200</code> object</td></tr></tbody></table><p>Use nouns for resources and methods for intent. Action endpoints are acceptable for domain commands whose meaning is richer than replacing a field.</p></section>
+
+<p class="section-label">Request flow</p><h2>Translate at the edges</h2><section class="lesson"><div class="diagram"><div class="flow"><div class="flow-node"><strong>Middleware</strong><br>cross-cutting</div><div class="flow-arrow">→</div><div class="flow-node"><strong>Handler</strong><br>HTTP → DTO</div><div class="flow-arrow">→</div><div class="flow-node"><strong>Service</strong><br>domain decision</div><div class="flow-arrow">→</div><div class="flow-node"><strong>Handler</strong><br>result → HTTP</div></div></div><pre><code>type CreateTaskRequest struct {
+    AssetID string `json:"assetId" binding:"required"`
+    Title   string `json:"title" binding:"required,min=3,max=120"`
+}
+
+func (h *Handler) CreateTask(c *gin.Context) {
+    var req CreateTaskRequest
+    if err := c.ShouldBindJSON(&amp;req); err != nil {
+        writeError(c, http.StatusBadRequest, "invalid_request", err.Error())
+        return
+    }
+    task, err := h.service.Create(c.Request.Context(), req.AssetID, req.Title)
+    if err != nil { h.writeDomainError(c, err); return }
+    c.JSON(http.StatusCreated, toTaskResponse(task))
+}</code></pre><p>DTOs describe transport input/output. Domain types describe business truth. Mapping looks repetitive, but it prevents JSON or framework concerns from leaking into the core.</p></section>
+
+<p class="section-label">Errors</p><h2>Stable machine codes, useful human messages</h2><section class="lesson"><pre><code>{
+  "error": {
+    "code": "invalid_transition",
+    "message": "task must be in progress before completion",
+    "requestId": "req-8f2..."
+  }
+}</code></pre><table><thead><tr><th>Situation</th><th>Status</th></tr></thead><tbody><tr><td>Malformed body / validation</td><td><code>400 Bad Request</code></td></tr><tr><td>Missing/invalid authentication</td><td><code>401 Unauthorized</code></td></tr><tr><td>Authenticated but forbidden</td><td><code>403 Forbidden</code></td></tr><tr><td>Task absent</td><td><code>404 Not Found</code></td></tr><tr><td>Invalid state transition</td><td><code>409 Conflict</code></td></tr><tr><td>Unexpected failure</td><td><code>500</code>, without internal details</td></tr></tbody></table><p>Map known domain errors centrally with <code>errors.Is</code>. Do not return raw database or stack messages to the browser.</p></section>
+
+<p class="section-label">Middleware and context</p><h2>Order changes behavior</h2><section class="lesson"><pre><code>router := gin.New()
+router.Use(gin.Recovery())
+router.Use(RequestID())
+router.Use(AccessLog())
+router.Use(CORS(frontendOrigin))
+
+api := router.Group("/api/v1")
+api.GET("/health", health)
+api.POST("/tasks", handler.CreateTask)</code></pre><p>Middleware wraps downstream work. Recovery should prevent a panic from killing the process; request IDs should exist before logs; auth must run before authorization. Pass <code>c.Request.Context()</code> into services so client cancellation and server deadlines can stop work.</p><details class="deep-dive"><summary>Deep dive: CORS</summary><div><p>CORS is a browser rule controlling which origins may read responses. During development, allow the exact Vite origin and needed methods/headers. It is not authentication and does not protect the API from non-browser clients.</p></div></details></section>
+
+<p class="section-label">Server lifecycle</p><h2>Start and stop intentionally</h2><section class="lesson"><pre><code>srv := &amp;http.Server{Addr: ":8080", Handler: router}
+go func() {
+    if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+        log.Fatal(err)
+    }
+}()
+
+&lt;-shutdownSignal
+ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+defer cancel()
+_ = srv.Shutdown(ctx)</code></pre><p>Graceful shutdown stops accepting new work and gives in-flight requests a deadline to finish. Later, database connections, message consumers, and workers join this lifecycle.</p></section>
+
+<p class="section-label">Tests</p><h2>Exercise routes in memory</h2><section class="lesson"><pre><code>func TestCreateTask(t *testing.T) {
+    router := newTestRouter(fakeService{})
+    body := strings.NewReader(`{"assetId":"a1","title":"Review owner"}`)
+    req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks", body)
+    req.Header.Set("Content-Type", "application/json")
+    rec := httptest.NewRecorder()
+
+    router.ServeHTTP(rec, req)
+    if rec.Code != http.StatusCreated { t.Fatalf("status = %d", rec.Code) }
+}</code></pre><p>Test one happy path and important boundary failures: malformed JSON, validation, missing task, invalid transition, and internal failure sanitization. Service tests already prove domain rules.</p></section>
+
+<section class="lab"><h2>Integration sequence</h2><ol><li>Write an API contract table before handlers.</li><li>Create DTOs and one error envelope.</li><li>Wire Gin routes to the Phase 2 service.</li><li>Add request ID, recovery, logging, and restricted CORS.</li><li>Test every endpoint with <code>httptest</code>.</li><li>Run React with MSW disabled and configure the API base URL.</li><li>Use browser network tools to inspect actual request/response pairs.</li><li>Add graceful shutdown and configuration validation.</li></ol></section>
+<section class="quiz"><h2>Knowledge check</h2><p><strong>1.</strong> Why pass request context into the service?</p><details class="answer"><summary>Show answer</summary><div>Cancellation and deadlines can propagate to database/message operations instead of doing abandoned work after the client or server times out.</div></details><p><strong>2.</strong> Is CORS security for the API?</p><details class="answer"><summary>Show answer</summary><div>No. It controls browser response access across origins. Authentication and authorization protect the API.</div></details><p><strong>3.</strong> Why separate DTO and domain model?</p><details class="answer"><summary>Show answer</summary><div>Transport shapes evolve for clients, while domain models express rules. Separation prevents JSON/framework details from controlling business logic.</div></details></section>
+<section class="readiness"><h2>Phase 3 readiness gate</h2><div class="checklist"><label class="check-item"><input type="checkbox" data-check="p3-1"><span>I can trace a request through middleware, route, handler, service, and response.</span></label><label class="check-item"><input type="checkbox" data-check="p3-2"><span>DTO validation and domain-error-to-HTTP mapping are consistent.</span></label><label class="check-item"><input type="checkbox" data-check="p3-3"><span>Handler tests cover success and meaningful failures without opening a port.</span></label><label class="check-item"><input type="checkbox" data-check="p3-4"><span>The React app works against Go with MSW disabled.</span></label><label class="check-item"><input type="checkbox" data-check="p3-5"><span>The server propagates context and shuts down gracefully.</span></label></div><p>Next: <span class="command">I'm done with Phase 3, start Phase 4 learning</span></p></section>
+<footer class="phase-footer"><a class="phase-link" href="../phase-02-go-foundations/index.html">← Phase 2</a><a class="phase-link next" href="../phase-04-interfaces/index.html">Phase 4: Interfaces →</a></footer></article></main></div><script src="../assets/course.js"></script></body></html>

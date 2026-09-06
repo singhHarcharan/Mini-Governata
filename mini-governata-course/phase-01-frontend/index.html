@@ -1,0 +1,116 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Phase 1 — React Governance Workspace</title><link rel="stylesheet" href="../assets/course.css"></head>
+<body data-root=".." data-phase="1"><div class="course-shell"><aside data-course-nav></aside><main class="course-main"><article class="article">
+<header class="phase-hero"><p class="eyebrow">Phase 1 · Frontend-only vertical slice</p><h1>Build the Mini Governata workspace in familiar React territory</h1><p class="hero-lede">Create an asset catalog and governance task board backed by a mock API. You will learn the domain and frontend contracts before Go adds unfamiliarity.</p><div class="hero-meta"><span class="pill">4–7 sessions</span><span class="pill">React + TypeScript</span><span class="pill">Mock Service Worker</span><span class="pill" data-phase-progress>Start when ready</span></div></header>
+<section class="callout"><h2>What you will build</h2><p>A user can browse data assets, search and filter them, open an asset detail page, create a governance task, move it through allowed statuses, and view an audit-like timeline. Refreshing the page still behaves like a server because requests are intercepted by a mock API.</p></section>
+
+<p class="section-label">Domain first</p><h2>Model the nouns and verbs</h2>
+<section class="lesson"><pre><code>export type Asset = {
+  id: string
+  name: string
+  kind: 'table' | 'dashboard' | 'pipeline'
+  owner: string
+  description: string
+  classification: 'public' | 'internal' | 'confidential'
+}
+
+export type TaskStatus = 'pending' | 'in_progress' | 'completed'
+
+export type GovernanceTask = {
+  id: string
+  assetId: string
+  title: string
+  status: TaskStatus
+  assignee?: string
+  createdAt: string
+}</code></pre><p>Types are not decoration; they are the first version of the contract Go will later implement. Use domain names in code and UI. Avoid vague containers such as <code>data</code>, <code>item</code>, or <code>thing</code>.</p><div class="two-col"><div class="mini-card"><h3>Nouns</h3><p>Asset, Task, User, AuditEntry. They become types, API resources, and later database tables.</p></div><div class="mini-card"><h3>Verbs</h3><p>List assets, inspect asset, create task, start task, complete task. They become use cases and endpoints.</p></div></div></section>
+
+<p class="section-label">Architecture</p><h2>Organize by feature, keep boundaries visible</h2>
+<section class="lesson"><pre><code>src/
+├── app/                 # router, providers, app shell
+├── features/
+│   ├── assets/
+│   │   ├── api.ts       # HTTP-shaped functions
+│   │   ├── components/
+│   │   ├── queries.ts   # server-state hooks
+│   │   ├── schemas.ts   # runtime response validation
+│   │   └── types.ts
+│   └── tasks/
+├── mocks/               # MSW handlers + in-memory data
+├── shared/              # generic UI/utilities only
+└── test/                # test setup and helpers</code></pre><p>A feature owns its domain-specific API calls, UI, queries, and types. <code>shared</code> is for genuinely reusable primitives—not a dumping ground. This mirrors backend modularity later.</p></section>
+
+<p class="section-label">State model</p><h2>Separate server state from UI state</h2>
+<section class="lesson"><table><thead><tr><th>State</th><th>Owner</th><th>Examples</th></tr></thead><tbody><tr><td>Server state</td><td>TanStack Query</td><td>assets, tasks, loading, caching, refetching</td></tr><tr><td>URL state</td><td>React Router/search params</td><td>selected asset ID, filters worth sharing/bookmarking</td></tr><tr><td>Local UI state</td><td><code>useState</code></td><td>open modal, temporary form input</td></tr><tr><td>Derived state</td><td>Compute during render</td><td>filtered count, whether Complete button is enabled</td></tr></tbody></table><div class="callout warning"><strong>Rule:</strong> do not copy query data into <code>useState</code>. Two sources of truth drift. Keep remote data in the query cache and derive views from it.</div>
+<pre><code>export const taskKeys = {
+  all: ['tasks'] as const,
+  list: (filters: TaskFilters) => [...taskKeys.all, 'list', filters] as const,
+}
+
+export function useTasks(filters: TaskFilters) {
+  return useQuery({
+    queryKey: taskKeys.list(filters),
+    queryFn: () => taskApi.list(filters),
+  })
+}</code></pre><p>Query keys are cache addresses. Stable key factories make invalidation predictable and later reveal which backend resource a screen depends on.</p></section>
+
+<p class="section-label">Contracts</p><h2>Types disappear at runtime; schemas do not</h2>
+<section class="lesson"><pre><code>const AssetSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1),
+  kind: z.enum(['table', 'dashboard', 'pipeline']),
+  owner: z.string(),
+  description: z.string(),
+  classification: z.enum(['public', 'internal', 'confidential']),
+})
+
+const AssetsResponseSchema = z.array(AssetSchema)
+
+export async function listAssets(): Promise&lt;Asset[]&gt; {
+  const response = await fetch('/api/assets')
+  if (!response.ok) throw new Error(`Request failed: ${response.status}`)
+  return AssetsResponseSchema.parse(await response.json())
+}</code></pre><p>TypeScript trusts your annotation, but the network can return anything. Zod converts an assumed contract into a checked contract. Later, Go DTOs and validation form the server half.</p></section>
+
+<p class="section-label">Mock boundary</p><h2>Mock HTTP, not imported functions</h2>
+<section class="lesson"><pre><code>const tasks: GovernanceTask[] = []
+
+export const handlers = [
+  http.get('/api/assets', () => HttpResponse.json(assets)),
+
+  http.post('/api/tasks', async ({ request }) => {
+    const input = CreateTaskSchema.parse(await request.json())
+    const task = { id: crypto.randomUUID(), status: 'pending',
+      createdAt: new Date().toISOString(), ...input }
+    tasks.push(task)
+    return HttpResponse.json(task, { status: 201 })
+  }),
+]</code></pre><p>MSW lets the application make real <code>fetch</code> calls while a service worker supplies responses. When Go arrives, the UI contract remains stable; only the request destination changes.</p><div class="diagram"><div class="flow"><div class="flow-node"><strong>Component</strong><br>mutation</div><div class="flow-arrow">→</div><div class="flow-node"><strong>API client</strong><br>fetch</div><div class="flow-arrow">→</div><div class="flow-node"><strong>MSW now</strong><br>mock handler</div><div class="flow-arrow">⇢</div><div class="flow-node"><strong>Go later</strong><br>real handler</div></div><p class="diagram-caption">The dashed replacement is the central design move of Phase 1.</p></div></section>
+
+<p class="section-label">Mutations</p><h2>Make write behavior explicit</h2>
+<section class="lesson"><pre><code>const completeTask = useMutation({
+  mutationFn: (taskId: string) => taskApi.complete(taskId),
+  onSuccess: () => queryClient.invalidateQueries({ queryKey: taskKeys.all }),
+})</code></pre><p>A mutation is not merely “POST.” It includes pending UX, error UX, success reconciliation, and double-submit protection. Disable the button while pending and show an actionable error without discarding the existing screen.</p><details class="deep-dive"><summary>Deep dive: invalidation or optimistic update?</summary><div><p>Begin with invalidation: after success, refetch authoritative data. Optimistic updates feel faster but require rollback and concurrency reasoning. Add them only after the basic contract is correct.</p></div></details></section>
+
+<p class="section-label">UX states</p><h2>Every data screen has more than a happy path</h2>
+<section class="lesson"><div class="three-col"><div class="mini-card"><h3>Loading</h3><p>Preserve layout; communicate that work is ongoing.</p></div><div class="mini-card"><h3>Empty</h3><p>Explain why nothing exists and provide a next action.</p></div><div class="mini-card"><h3>Error</h3><p>Keep context, use plain language, offer retry.</p></div></div><p>Also design stale/refetching state, disabled actions, success feedback, keyboard focus after modals, accessible labels, and narrow mobile layouts.</p></section>
+
+<p class="section-label">Testing</p><h2>Test behavior at the boundary users see</h2>
+<section class="lesson"><pre><code>it('completes a pending task', async () => {
+  renderApp('/tasks')
+  const user = userEvent.setup()
+
+  await user.click(await screen.findByRole('button', { name: /complete/i }))
+
+  expect(await screen.findByText(/completed/i)).toBeVisible()
+})</code></pre><p>Prefer roles and accessible names over CSS selectors. Let MSW exercise the HTTP-shaped contract. Add one schema-failure test so a malformed response becomes an intentional error state.</p></section>
+
+<section class="lab"><h2>Implementation sequence</h2><ol><li>Scaffold Vite + React + TypeScript and the app shell.</li><li>Create domain types and Zod schemas.</li><li>Add React Router: assets list, asset detail, tasks.</li><li>Implement MSW read endpoints and query hooks.</li><li>Build loading, empty, error, and populated states.</li><li>Add create/start/complete task mutations.</li><li>Add task timeline and asset-task relationship.</li><li>Test the main user flow and one failure per screen.</li></ol><div class="callout teal"><strong>Vertical-slice rule:</strong> finish one thin user journey—list assets → view asset → create task—before decorating all pages.</div></section>
+
+<section class="quiz"><h2>Knowledge check</h2><p><strong>1.</strong> Why use MSW instead of importing a mock <code>listAssets()</code>?</p><details class="answer"><summary>Show answer</summary><div>MSW preserves the network boundary, so the component, query hook, fetch behavior, status handling, and runtime parsing remain the same when Go replaces the mock.</div></details><p><strong>2.</strong> Where should selected asset ID live?</p><details class="answer"><summary>Show answer</summary><div>Usually in the URL route because it identifies the page, supports refresh/deep linking, and should be shareable.</div></details><p><strong>3.</strong> What must happen after a successful task mutation?</p><details class="answer"><summary>Show answer</summary><div>The UI cache must reconcile with server truth—initially by invalidating/refetching relevant task queries—and pending/error/success states must be represented.</div></details></section>
+
+<section class="lesson"><h2>Common traps</h2><ul class="mistakes"><li>Building a global state store before deciding which state is remote, URL, local, or derived.</li><li>Sharing generated-looking components instead of domain concepts.</li><li>Typing API JSON without validating it at runtime.</li><li>Testing implementation details rather than user behavior.</li><li>Perfecting the dashboard before one complete mutation flow works.</li></ul></section>
+
+<section class="readiness"><h2>Phase 1 readiness gate</h2><div class="checklist"><label class="check-item"><input type="checkbox" data-check="p1-1"><span>I can explain Asset and Task using domain language and define their TypeScript + runtime schemas.</span></label><label class="check-item"><input type="checkbox" data-check="p1-2"><span>I can distinguish server, URL, local, and derived state.</span></label><label class="check-item"><input type="checkbox" data-check="p1-3"><span>The frontend uses fetch through MSW and handles loading, empty, error, and success states.</span></label><label class="check-item"><input type="checkbox" data-check="p1-4"><span>Create/start/complete mutations reconcile the query cache and prevent duplicate submits.</span></label><label class="check-item"><input type="checkbox" data-check="p1-5"><span>A user-level test proves the primary governance journey.</span></label></div><p>For guided coding, say: <span class="command">Start Phase 1 implementation</span>. When complete: <span class="command">I'm done with Phase 1, start Phase 2 learning</span></p></section>
+<footer class="phase-footer"><a class="phase-link" href="../phase-00-orientation/index.html">← Phase 0</a><a class="phase-link next" href="../phase-02-go-foundations/index.html">Phase 2: Go foundations →</a></footer>
+</article></main></div><script src="../assets/course.js"></script></body></html>

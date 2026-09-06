@@ -1,0 +1,71 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Phase 4 — Interfaces & Clean Boundaries</title><link rel="stylesheet" href="../assets/course.css"></head><body data-root=".." data-phase="4"><div class="course-shell"><aside data-course-nav></aside><main class="course-main"><article class="article">
+<header class="phase-hero"><p class="eyebrow">Phase 4 · Architecture refactor</p><h1>Make runtime wiring easy to reason about</h1><p class="hero-lede">Refactor the working API into explicit domain, application, transport, and infrastructure boundaries. Learn exactly how implicit interfaces and constructor injection connect Governata.</p><div class="hero-meta"><span class="pill">4–7 sessions</span><span class="pill">Interfaces</span><span class="pill">Dependency inversion</span><span class="pill" data-phase-progress>Start when ready</span></div></header>
+<section class="callout"><h2>What changes</h2><p>Behavior should remain the same. Structure becomes testable: handlers depend on an application service, the service depends on small ports, and concrete adapters are selected only in startup code.</p></section>
+
+<p class="section-label">Mental model</p><h2>Policy points inward; details plug in</h2><section class="lesson"><div class="diagram"><div class="flow"><div class="flow-node"><strong>HTTP adapter</strong><br>Gin</div><div class="flow-arrow">→</div><div class="flow-node"><strong>Application</strong><br>use cases</div><div class="flow-arrow">→</div><div class="flow-node"><strong>Domain</strong><br>rules</div></div><div class="flow" style="margin-top:10px"><div class="flow-node"><strong>Postgres adapter</strong><br>detail</div><div class="flow-arrow">→ implements →</div><div class="flow-node"><strong>Store port</strong><br>needed behavior</div><div class="flow-arrow">← used by ←</div><div class="flow-node"><strong>Application</strong></div></div><p class="diagram-caption">Source dependencies point toward stable policy. Runtime data can flow both directions.</p></div><p>“Clean” does not mean many folders. It means business decisions can be understood and tested without booting Gin, PostgreSQL, or NATS.</p></section>
+
+<p class="section-label">Implicit interfaces</p><h2>Implementation is structural</h2><section class="lesson"><pre><code>// application package: the consumer owns this interface
+type TaskRepository interface {
+    Find(ctx context.Context, tenantID, taskID string) (*task.Task, error)
+    Save(ctx context.Context, task *task.Task) error
+}
+
+// postgres package: no "implements" declaration
+type TaskStore struct { db *gorm.DB }
+func (s *TaskStore) Find(ctx context.Context, tenantID, taskID string) (*task.Task, error) { ... }
+func (s *TaskStore) Save(ctx context.Context, value *task.Task) error { ... }
+
+// Optional compile-time documentation/check:
+var _ application.TaskRepository = (*TaskStore)(nil)</code></pre><p>A concrete type satisfies an interface automatically when its method set matches. This enables decoupling but creates a navigation gap. The compile-time assertion documents intent and fails early after signature changes.</p><details class="deep-dive"><summary>Deep dive: pointer versus value method sets</summary><div><p>Methods with receiver <code>(t T)</code> belong to both <code>T</code> and <code>*T</code> method sets. Methods with receiver <code>(t *T)</code> belong to <code>*T</code>. Therefore a value <code>T</code> may not satisfy an interface that requires a pointer-receiver method.</p></div></details></section>
+
+<p class="section-label">Interface design</p><h2>Accept interfaces; return useful concrete types</h2><section class="lesson"><div class="two-col"><div class="mini-card"><h3>Good port</h3><pre><code>type TaskFinder interface {
+  Find(ctx context.Context,
+    tenantID, id string) (*Task, error)
+}</code><p>Small, consumer-specific, meaningful.</p></div><div class="mini-card"><h3>Leaky port</h3><pre><code>type Repository interface {
+  DB() *gorm.DB
+  Find(any) any
+  Save(any) error
+  // 22 more methods...
+}</code><p>Infrastructure leaks in; callers depend on too much.</p></div></div><p>Do not create an interface merely because a type exists. Create it where an actual consumer needs substitutable behavior—testing, alternative infrastructure, or architectural isolation.</p></section>
+
+<p class="section-label">Construction</p><h2>The composition root is the runtime map</h2><section class="lesson"><pre><code>func main() {
+    cfg := mustLoadConfig()
+    db := mustOpenDatabase(cfg.DatabaseURL)
+
+    taskStore := postgres.NewTaskStore(db)
+    clock := systemclock.New()
+    taskService := application.NewTaskService(taskStore, clock)
+    taskHandler := httpapi.NewTaskHandler(taskService)
+
+    router := httpapi.NewRouter(taskHandler)
+    runServer(router)
+}</code></pre><p>Construct from details inward, then expose outward. Constructors validate dependencies and make them visible. Avoid global service locators because they hide what a type needs and make tests order-dependent.</p><div class="react-bridge"><div class="bridge-side"><h4>React</h4><p>A provider injects a typed client; components depend on its capabilities.</p></div><div class="bridge-arrow">↔</div><div class="bridge-side"><h4>Go</h4><p>A constructor injects an interface; the composition root chooses the adapter.</p></div></div></section>
+
+<p class="section-label">Package structure</p><h2>Use boundaries, not ceremonial layers</h2><section class="lesson"><pre><code>internal/
+├── task/                 # entities, statuses, transition rules
+├── application/          # use cases + ports it consumes
+├── adapter/
+│   ├── httpapi/          # Gin DTOs, handlers, error mapping
+│   └── memory/           # current repository adapter
+└── platform/             # config, logging, clock implementations
+cmd/api/main.go           # composition root</code></pre><p>The <code>internal</code> directory prevents imports from outside the parent module. Avoid circular imports by making dependencies one-directional. If packages A and B need each other, the responsibilities or shared contract are probably misplaced.</p></section>
+
+<p class="section-label">Fakes and tests</p><h2>Test use cases without infrastructure</h2><section class="lesson"><pre><code>type fakeTaskRepo struct {
+    task *task.Task
+    saved bool
+    err error
+}
+func (f *fakeTaskRepo) Find(context.Context, string, string) (*task.Task, error) {
+    return f.task, f.err
+}
+func (f *fakeTaskRepo) Save(context.Context, *task.Task) error {
+    f.saved = true
+    return f.err
+}</code></pre><p>A hand-written fake is often clearer than a generated mock for two-method interfaces. Test observable decisions: error returned, transition applied, save called. Do not encode the exact internal call order unless order is a real invariant.</p></section>
+
+<p class="section-label">Navigation drill</p><h2>Resolve an interface call systematically</h2><section class="lab"><ol><li>At <code>s.repo.Save(...)</code>, open the field’s interface definition.</li><li>Write down the exact method signature.</li><li>Use “Go to implementations” or search <code>func (.*) Save(</code>.</li><li>Identify plausible adapters.</li><li>Find <code>NewTaskService(</code> references.</li><li>Inspect the startup/composition root to see the actual injected adapter.</li><li>Repeat with a Governata interface call and draw the chain.</li></ol></section>
+
+<section class="quiz"><h2>Knowledge check</h2><p><strong>1.</strong> Which package should normally define <code>TaskRepository</code>?</p><details class="answer"><summary>Show answer</summary><div>The consuming application package, because it knows the minimum behavior it needs. The PostgreSQL adapter should satisfy that contract without owning it.</div></details><p><strong>2.</strong> Why can a giant repository interface hurt?</p><details class="answer"><summary>Show answer</summary><div>Consumers depend on unrelated methods, fakes become large, changes ripple widely, and infrastructure concepts leak into use cases.</div></details><p><strong>3.</strong> What is the composition root?</p><details class="answer"><summary>Show answer</summary><div>The startup location that creates concrete adapters/services and injects dependencies. It is the authoritative runtime wiring map.</div></details></section>
+<section class="lesson"><h2>Common traps</h2><ul class="mistakes"><li>Inventing interfaces on the provider side before a consumer needs them.</li><li>Returning an interface from every constructor, hiding useful concrete behavior.</li><li>Adding layers that only forward arguments and express no boundary.</li><li>Letting handlers use GORM directly.</li><li>Using globals to avoid explicit constructor wiring.</li></ul></section>
+<section class="readiness"><h2>Phase 4 readiness gate</h2><div class="checklist"><label class="check-item"><input type="checkbox" data-check="p4-1"><span>Domain rules compile and test without Gin or storage.</span></label><label class="check-item"><input type="checkbox" data-check="p4-2"><span>Application services declare narrow interfaces for capabilities they consume.</span></label><label class="check-item"><input type="checkbox" data-check="p4-3"><span>Concrete adapters are chosen explicitly in one composition root.</span></label><label class="check-item"><input type="checkbox" data-check="p4-4"><span>I can resolve an interface call to its runtime implementation.</span></label><label class="check-item"><input type="checkbox" data-check="p4-5"><span>Tests use small fakes and verify behavior, not incidental call choreography.</span></label></div><p>Next: <span class="command">I'm done with Phase 4, start Phase 5 learning</span></p></section>
+<footer class="phase-footer"><a class="phase-link" href="../phase-03-go-api/index.html">← Phase 3</a><a class="phase-link next" href="../phase-05-postgres-gorm/index.html">Phase 5: PostgreSQL →</a></footer></article></main></div><script src="../assets/course.js"></script></body></html>

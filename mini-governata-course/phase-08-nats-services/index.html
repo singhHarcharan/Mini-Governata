@@ -1,0 +1,54 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Phase 8 — NATS & Service Boundaries</title><link rel="stylesheet" href="../assets/course.css"></head><body data-root=".." data-phase="8"><div class="course-shell"><aside data-course-nav></aside><main class="course-main"><article class="article">
+<header class="phase-hero"><p class="eyebrow">Phase 8 · Distributed Mini Governata</p><h1>Split Core and Governance without creating a distributed monolith</h1><p class="hero-lede">Give services clear ownership, connect them with NATS/JetStream contracts, and make eventual consistency visible in both code and UX.</p><div class="hero-meta"><span class="pill">7–12 sessions</span><span class="pill">NATS</span><span class="pill">JetStream</span><span class="pill">Events + projections</span><span class="pill" data-phase-progress>Start when ready</span></div></header>
+<section class="callout"><h2>What you will build</h2><p>Core owns canonical assets. Governance owns tasks and an asset projection needed for its screens. Core publishes asset events; Governance consumes them durably. Governance can request current asset details when synchronous truth is required.</p></section>
+
+<p class="section-label">Ownership</p><h2>A service owns its data and decisions</h2><section class="lesson"><table><thead><tr><th>Core service</th><th>Governance service</th></tr></thead><tbody><tr><td>Canonical asset identity and metadata</td><td>Governance tasks, transitions, policies, audit</td></tr><tr><td>Publishes asset lifecycle facts</td><td>Maintains an asset projection for its use cases</td></tr><tr><td>Answers asset queries</td><td>Does not update Core tables directly</td></tr></tbody></table><p>Do not share one repository across services or join across each other’s tables. A service boundary is meaningful only if its owner can protect invariants independently.</p></section>
+
+<p class="section-label">NATS modes</p><h2>Choose communication from the required semantics</h2><section class="lesson"><table><thead><tr><th>Mode</th><th>Use</th><th>Tradeoff</th></tr></thead><tbody><tr><td>Core pub/sub</td><td>Ephemeral fan-out notifications</td><td>Offline subscriber misses messages.</td></tr><tr><td>Request/reply</td><td>Immediate question with bounded response</td><td>Caller and responder are temporally coupled.</td></tr><tr><td>JetStream</td><td>Durable events, replay, acknowledged processing</td><td>Requires consumer, retention, retry, and idempotency design.</td></tr></tbody></table><p>Use request/reply when the user cannot proceed without a current answer. Use durable events to distribute facts that consumers may process later.</p></section>
+
+<p class="section-label">Event contract</p><h2>An event states a past fact</h2><section class="lesson"><pre><code>type Envelope[T any] struct {
+    ID            string    `json:"id"`
+    Type          string    `json:"type"`
+    Version       int       `json:"version"`
+    TenantID      string    `json:"tenantId"`
+    OccurredAt    time.Time `json:"occurredAt"`
+    CorrelationID string    `json:"correlationId"`
+    CausationID   string    `json:"causationId,omitempty"`
+    Data          T         `json:"data"`
+}
+
+type AssetCreatedV1 struct { ID, Name, Kind, Owner string }</code></pre><p><code>asset.created.v1</code> is a fact. <code>create.asset</code> is a command. Version schemas deliberately. IDs support deduplication; correlation joins one business flow; causation points to the message/request that triggered this event.</p><div class="callout warning">Do not publish internal database structs. Consumers will accidentally depend on fields you never promised.</div></section>
+
+<p class="section-label">Subjects and consumers</p><h2>Names route messages; configuration defines durability</h2><section class="lesson"><pre><code>// Examples—not magic strings scattered through handlers.
+core.asset.created.v1
+core.asset.updated.v1
+governance.task.completed.v1
+
+msg, err := js.Publish(ctx, "core.asset.created.v1", payload)
+
+consumer, err := js.CreateOrUpdateConsumer(ctx, "CORE_EVENTS", jetstream.ConsumerConfig{
+    Durable: "governance-assets-v1",
+    FilterSubject: "core.asset.*.v1",
+    AckPolicy: jetstream.AckExplicitPolicy,
+})</code></pre><p>A stream persists selected subjects. A durable consumer remembers progress. Explicit acknowledgement means “processing succeeded.” Redelivery means duplicates are normal. Queue groups distribute work among replicas; they do not turn processing into exactly-once effects.</p></section>
+
+<p class="section-label">Projection</p><h2>Eventual consistency is a product state</h2><section class="lesson"><div class="diagram"><div class="flow"><div class="flow-node"><strong>Core DB</strong><br>asset saved</div><div class="flow-arrow">→</div><div class="flow-node"><strong>JetStream</strong><br>asset.created</div><div class="flow-arrow">→</div><div class="flow-node"><strong>Governance</strong><br>consumer</div><div class="flow-arrow">→</div><div class="flow-node"><strong>Projection DB</strong><br>asset summary</div><div class="flow-arrow">→</div><div class="flow-node"><strong>React</strong><br>screen</div></div></div><p>The projection may lag canonical state. The UI can show “syncing” after creation, retry reads, or use the command response for immediate confirmation. Never promise immediate cross-service visibility unless the architecture provides it.</p></section>
+
+<p class="section-label">Handler discipline</p><h2>Acknowledge only after a durable effect</h2><section class="lesson"><pre><code>func handleAssetCreated(ctx context.Context, msg jetstream.Msg) {
+    event, err := decodeAndValidate(msg.Data())
+    if err != nil { msg.Term(); return }          // poison contract; inspect/DLQ
+    if inbox.Seen(ctx, event.ID) { msg.Ack(); return }
+
+    if err := projection.Apply(ctx, event); err != nil {
+        msg.Nak()                                  // retry later
+        return
+    }
+    msg.Ack()
+}</code></pre><p>Decode, validate, deduplicate, apply, then acknowledge. Permanent schema errors and transient database errors need different treatment. Phase 9 makes the reliability machinery explicit.</p></section>
+
+<p class="section-label">Governata connection</p><h2>Read the platform as islands plus contracts</h2><section class="lesson"><p>Governata’s design treats modules as islands and NATS as the nervous system. When tracing across modules:</p><ol><li>Find the subject constant or event type in the publisher.</li><li>Find stream/consumer registration and filtered subjects.</li><li>Find the message handler.</li><li>Trace from decoded payload into application service/projection.</li><li>Inspect acknowledgment and failure behavior.</li></ol><p>Direct source navigation stops at publish because the receiver is chosen by broker configuration at runtime.</p></section>
+
+<section class="lab"><h2>Build sequence</h2><ol><li>Write an ownership table: data, commands, events, and queries per service.</li><li>Move canonical assets into Core; keep tasks in Governance.</li><li>Define versioned envelopes and subject constants.</li><li>Publish asset events and configure a durable stream.</li><li>Build Governance’s idempotent asset projection consumer.</li><li>Add request/reply for one truly synchronous lookup with timeout.</li><li>Expose projection lag/syncing behavior in React.</li><li>Stop Governance, publish events, restart it, and prove catch-up.</li></ol></section>
+<section class="quiz"><h2>Knowledge check</h2><p><strong>1.</strong> Does message acknowledgement guarantee exactly-once business effects?</p><details class="answer"><summary>Show answer</summary><div>No. A crash after the database write but before ack causes redelivery. The handler must be idempotent.</div></details><p><strong>2.</strong> When use request/reply?</p><details class="answer"><summary>Show answer</summary><div>For a bounded synchronous question whose answer is required now, with explicit timeout and failure behavior—not as a hidden replacement for every function call.</div></details><p><strong>3.</strong> Why maintain a projection?</p><details class="answer"><summary>Show answer</summary><div>Governance can serve its use cases without querying Core for every read while respecting Core’s ownership. The tradeoff is observable lag.</div></details></section>
+<section class="readiness"><h2>Phase 8 readiness gate</h2><div class="checklist"><label class="check-item"><input type="checkbox" data-check="p8-1"><span>Core and Governance have explicit, non-overlapping data ownership.</span></label><label class="check-item"><input type="checkbox" data-check="p8-2"><span>Events use versioned envelopes, stable subjects, IDs, tenant, correlation, and time.</span></label><label class="check-item"><input type="checkbox" data-check="p8-3"><span>A durable consumer validates, deduplicates, applies, then acknowledges.</span></label><label class="check-item"><input type="checkbox" data-check="p8-4"><span>The projection catches up after downtime and the UI acknowledges consistency lag.</span></label><label class="check-item"><input type="checkbox" data-check="p8-5"><span>I can trace a Governata event from publisher through broker configuration to consumer.</span></label></div><p>Next: <span class="command">I'm done with Phase 8, start Phase 9 learning</span></p></section>
+<footer class="phase-footer"><a class="phase-link" href="../phase-07-workflow-audit/index.html">← Phase 7</a><a class="phase-link next" href="../phase-09-reliable-events/index.html">Phase 9: Reliable events →</a></footer></article></main></div><script src="../assets/course.js"></script></body></html>

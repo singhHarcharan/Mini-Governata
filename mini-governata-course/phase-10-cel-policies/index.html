@@ -1,0 +1,63 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Phase 10 — CEL Policy Evaluation</title><link rel="stylesheet" href="../assets/course.css"></head><body data-root=".." data-phase="10"><div class="course-shell"><aside data-course-nav></aside><main class="course-main"><article class="article">
+<header class="phase-hero"><p class="eyebrow">Phase 10 · Configurable decisions</p><h1>Evaluate governance policies safely with CEL</h1><p class="hero-lede">Represent policy rules as typed expressions, compile them before activation, evaluate them against a controlled context, and record explainable decisions.</p><div class="hero-meta"><span class="pill">5–9 sessions</span><span class="pill">CEL-Go</span><span class="pill">Policy lifecycle</span><span class="pill">Explainability</span><span class="pill" data-phase-progress>Start when ready</span></div></header>
+<section class="callout"><h2>What you will build</h2><p>Admins can draft a policy such as “confidential assets require an assigned owner,” test it on sample context, activate a validated version, and see evaluation results attached to tasks/audit.</p></section>
+<div class="diagram"><div class="flow"><div class="flow-node"><strong>Draft</strong><br>expression</div><div class="flow-arrow">→</div><div class="flow-node"><strong>Compile</strong><br>type-check</div><div class="flow-arrow">→</div><div class="flow-node"><strong>Activate</strong><br>immutable version</div><div class="flow-arrow">→</div><div class="flow-node"><strong>Evaluate</strong><br>bounded context</div><div class="flow-arrow">→</div><div class="flow-node"><strong>Record</strong><br>decision</div></div><p class="diagram-caption">Invalid drafts stop before activation; runtime decisions always identify their version.</p></div>
+
+<p class="section-label">Why CEL</p><h2>Expressions, not arbitrary application code</h2><section class="lesson"><pre><code>// Example CEL expressions
+asset.classification != "confidential" || asset.owner != ""
+task.status == "completed" ? task.assignee != "" : true
+request.roles.exists(r, r == "governance_admin")</code></pre><p>CEL is a non-Turing-complete expression language designed for fast, safe evaluation against a declared environment. It is suitable for predicates and computed values, not database writes, loops with side effects, or unconstrained scripting.</p><div class="two-col"><div class="mini-card"><h3>Application code</h3><p>Owns workflow, persistence, I/O, security, and the policy lifecycle.</p></div><div class="mini-card"><h3>CEL expression</h3><p>Evaluates a decision from the bounded facts the application supplies.</p></div></div></section>
+
+<p class="section-label">Environment</p><h2>Declare what a policy is allowed to see</h2><section class="lesson"><pre><code>env, err := cel.NewEnv(
+    cel.Variable("asset", cel.MapType(cel.StringType, cel.DynType)),
+    cel.Variable("task", cel.MapType(cel.StringType, cel.DynType)),
+    cel.Variable("request", cel.MapType(cel.StringType, cel.DynType)),
+)
+
+ast, issues := env.Compile(expression)
+if issues != nil &amp;&amp; issues.Err() != nil {
+    return fmt.Errorf("compile policy: %w", issues.Err())
+}
+program, err := env.Program(ast)</code></pre><p>Compile when a policy is created/activated, not on every request. A stricter typed object environment catches more mistakes than dynamic maps. Expose only required, sanitized facts—never database handles, secrets, or broad internal objects.</p></section>
+
+<p class="section-label">Evaluate</p><h2>Separate compile failure from false result</h2><section class="lesson"><pre><code>out, details, err := program.Eval(map[string]any{
+    "asset": map[string]any{
+        "classification": asset.Classification,
+        "owner": asset.Owner,
+    },
+    "task": map[string]any{"status": task.Status},
+    "request": map[string]any{"roles": principal.Roles},
+})
+if err != nil { return Decision{}, fmt.Errorf("evaluate policy: %w", err) }
+
+allowed, ok := out.Value().(bool)
+if !ok { return Decision{}, ErrNonBooleanResult }</code></pre><table><thead><tr><th>Outcome</th><th>Meaning</th></tr></thead><tbody><tr><td>Compilation error</td><td>Policy definition is invalid; do not activate.</td></tr><tr><td>Evaluation error</td><td>Runtime context/type/resource issue; apply explicit fail behavior.</td></tr><tr><td><code>false</code></td><td>Valid policy evaluated and denied.</td></tr><tr><td><code>true</code></td><td>Valid policy evaluated and allowed.</td></tr></tbody></table><p>For enforcement policies, fail closed unless the product explicitly defines another safe mode. For advisory policies, an evaluation failure may create a visible warning rather than block.</p></section>
+
+<p class="section-label">Lifecycle</p><h2>A policy is a versioned governed artifact</h2><section class="lesson"><pre><code>type PolicyVersion struct {
+    PolicyID      string
+    Version       int
+    Expression    string
+    Effect        string // enforce | advise
+    Status        string // draft | active | retired
+    CreatedBy     string
+    CreatedAt     time.Time
+    SchemaVersion int
+}</code></pre><ol><li>Draft expression and metadata.</li><li>Compile and show diagnostics with location.</li><li>Test against representative fixtures.</li><li>Approve/activate an immutable version.</li><li>Evaluate that exact version.</li><li>Retire by activating a later version; retain historical evidence.</li></ol><p>Never silently edit an active policy because old decisions would become impossible to reproduce.</p></section>
+
+<p class="section-label">Decision record</p><h2>Make “why” inspectable</h2><section class="lesson"><pre><code>type PolicyDecision struct {
+    PolicyID, PolicyVersion string
+    EntityType, EntityID    string
+    Result                  bool
+    Effect                  string
+    EvaluatedAt             time.Time
+    ContextDigest           string
+    ErrorCode               string
+    CorrelationID           string
+}</code></pre><p>Record policy/version, target, outcome, time, and correlation. A digest can prove which normalized context was used without storing all sensitive inputs. Give policies human descriptions and remediation messages; raw expressions alone are poor UX.</p></section>
+
+<p class="section-label">Policy tester</p><h2>Design fast feedback before activation</h2><section class="lab"><ol><li>Editor accepts an expression and displays variables/operators available.</li><li>“Compile” returns precise diagnostics and prevents invalid activation.</li><li>Sample JSON context is schema-validated.</li><li>“Evaluate” shows result, policy effect, and a plain-language message.</li><li>Fixture table covers allowed, denied, missing, and wrong-type cases.</li><li>Activation requires version metadata and permission.</li></ol></section>
+
+<section class="quiz"><h2>Knowledge check</h2><p><strong>1.</strong> Why compile on activation?</p><details class="answer"><summary>Show answer</summary><div>Invalid expressions are rejected early, compiled programs can be cached, and request latency avoids repeated compilation.</div></details><p><strong>2.</strong> Is <code>false</code> an evaluation error?</p><details class="answer"><summary>Show answer</summary><div>No. It is a valid decision. Errors mean the expression/context could not be evaluated as designed.</div></details><p><strong>3.</strong> Why version policies immutably?</p><details class="answer"><summary>Show answer</summary><div>Historical decisions must identify the exact rule evaluated, enabling audit, rollback, comparison, and reproducibility.</div></details></section>
+<section class="lesson"><h2>Common traps</h2><ul class="mistakes"><li>Allowing policy expressions to fetch data or cause side effects.</li><li>Compiling on every evaluation.</li><li>Passing unbounded internal objects into activation context.</li><li>Treating evaluation errors as ordinary denials without recording the distinction.</li><li>Editing active expressions in place.</li></ul></section>
+<section class="readiness"><h2>Phase 10 readiness gate</h2><div class="checklist"><label class="check-item"><input type="checkbox" data-check="p10-1"><span>CEL has an explicit, minimal environment and sanitized activation context.</span></label><label class="check-item"><input type="checkbox" data-check="p10-2"><span>Policies compile and test before immutable activation.</span></label><label class="check-item"><input type="checkbox" data-check="p10-3"><span>False decisions, compile failures, and evaluation failures remain distinct.</span></label><label class="check-item"><input type="checkbox" data-check="p10-4"><span>Decision records identify policy version, target, result, time, and correlation.</span></label><label class="check-item"><input type="checkbox" data-check="p10-5"><span>The tester explains diagnostics and remediation without exposing sensitive context.</span></label></div><p>Next: <span class="command">I'm done with Phase 10, start Phase 11 learning</span></p></section>
+<footer class="phase-footer"><a class="phase-link" href="../phase-09-reliable-events/index.html">← Phase 9</a><a class="phase-link next" href="../phase-11-storage-workers/index.html">Phase 11: Storage & workers →</a></footer></article></main></div><script src="../assets/course.js"></script></body></html>

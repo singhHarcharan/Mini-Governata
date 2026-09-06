@@ -1,0 +1,67 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Phase 9 — Reliable Events</title><link rel="stylesheet" href="../assets/course.css"></head><body data-root=".." data-phase="9"><div class="course-shell"><aside data-course-nav></aside><main class="course-main"><article class="article">
+<header class="phase-hero"><p class="eyebrow">Phase 9 · Failure-first messaging</p><h1>Make database changes and events survive crashes</h1><p class="hero-lede">Solve the dual-write problem with an outbox, make consumers idempotent with an inbox, and add bounded retries, backoff, dead-letter handling, and cancellable worker pools.</p><div class="hero-meta"><span class="pill">7–12 sessions</span><span class="pill">Outbox/inbox</span><span class="pill">Retries + DLQ</span><span class="pill">Goroutines + channels</span><span class="pill" data-phase-progress>Start when ready</span></div></header>
+<section class="callout warning"><h2>The failure to understand</h2><p>“Save task, then publish event” is two independent writes. A crash between them leaves durable state with no event. Publishing first can leave an event describing a state that never committed. Ordinary transactions cannot span PostgreSQL and NATS safely.</p></section>
+
+<p class="section-label">Outbox</p><h2>Commit state and publication intent together</h2><section class="lesson"><div class="diagram"><div class="flow"><div class="flow-node"><strong>DB transaction</strong><br>task + outbox row</div><div class="flow-arrow">→ commit →</div><div class="flow-node"><strong>Publisher worker</strong><br>claim row</div><div class="flow-arrow">→</div><div class="flow-node"><strong>NATS</strong><br>publish</div><div class="flow-arrow">→</div><div class="flow-node"><strong>Mark sent</strong></div></div></div><pre><code>CREATE TABLE outbox_events (
+  id uuid PRIMARY KEY,
+  subject text NOT NULL,
+  payload jsonb NOT NULL,
+  occurred_at timestamptz NOT NULL,
+  attempts integer NOT NULL DEFAULT 0,
+  available_at timestamptz NOT NULL,
+  published_at timestamptz,
+  last_error text
+);</code></pre><pre><code>return db.Transaction(func(tx *gorm.DB) error {
+    if err := saveTask(tx, task); err != nil { return err }
+    return tx.Create(&amp;outboxRow{
+        ID: event.ID, Subject: event.Subject, Payload: event.JSON,
+        AvailableAt: clock.Now(),
+    }).Error
+})</code></pre><p>The API can return after the transaction commits. A worker publishes later. The outbox provides <em>at-least-once publication intent</em>; it does not remove duplicates.</p></section>
+
+<p class="section-label">Claiming</p><h2>Let replicas share work without double-claiming</h2><section class="lesson"><pre><code>SELECT id, subject, payload
+FROM outbox_events
+WHERE published_at IS NULL AND available_at &lt;= now()
+ORDER BY occurred_at
+FOR UPDATE SKIP LOCKED
+LIMIT 100;</code></pre><p>Workers claim rows inside a short transaction. <code>SKIP LOCKED</code> lets concurrent workers take different rows. Do not hold the database transaction open during network publication; use a lease/claim timestamp if publishing may take time, and reclaim expired leases.</p></section>
+
+<p class="section-label">Inbox/idempotency</p><h2>Duplicates are expected input</h2><section class="lesson"><pre><code>CREATE TABLE inbox_messages (
+  consumer text NOT NULL,
+  message_id uuid NOT NULL,
+  processed_at timestamptz NOT NULL,
+  PRIMARY KEY (consumer, message_id)
+);</code></pre><pre><code>err := db.Transaction(func(tx *gorm.DB) error {
+    inserted := insertInboxIfAbsent(tx, consumerName, event.ID)
+    if !inserted { return nil }           // already applied
+    return applyProjection(tx, event)
+})
+if err == nil { msg.Ack() }</code></pre><p>The deduplication marker and business effect must commit atomically. Idempotency means processing the same message again produces no additional effect—not merely that the handler “usually” sees one delivery.</p></section>
+
+<p class="section-label">Retry policy</p><h2>Retry transient failures; surface permanent ones</h2><section class="lesson"><pre><code>delay := min(base*time.Duration(1&lt;&lt;attempt), maxDelay)
+jitter := time.Duration(rand.Int64N(int64(delay / 4)))
+availableAt := clock.Now().Add(delay + jitter)</code></pre><table><thead><tr><th>Failure</th><th>Action</th></tr></thead><tbody><tr><td>Temporary timeout/unavailable DB</td><td>Retry with exponential backoff + jitter.</td></tr><tr><td>Invalid schema/version</td><td>Do not retry forever; quarantine/DLQ and alert.</td></tr><tr><td>Business rejection</td><td>Record outcome; usually permanent.</td></tr><tr><td>Unknown failure</td><td>Bound attempts, preserve diagnostics, alert.</td></tr></tbody></table><p>Jitter prevents many workers retrying simultaneously. A dead-letter queue is not a trash bin: define ownership, alerts, inspection, correction, and safe replay.</p></section>
+
+<p class="section-label">Concurrency</p><h2>Goroutines need ownership and backpressure</h2><section class="lesson"><pre><code>jobs := make(chan OutboxEvent, 100)
+group, ctx := errgroup.WithContext(ctx)
+
+group.Go(func() error { defer close(jobs); return poll(ctx, jobs) })
+for i := 0; i &lt; workerCount; i++ {
+    group.Go(func() error {
+        for {
+            select {
+            case &lt;-ctx.Done(): return ctx.Err()
+            case event, ok := &lt;-jobs:
+                if !ok { return nil }
+                publish(ctx, event)
+            }
+        }
+    })
+}
+return group.Wait()</code></pre><p>A goroutine is a lightweight concurrent function. A channel communicates values and applies backpressure when bounded. The sender owns closing the channel. Every goroutine needs an exit path; cancellation should reach blocking operations.</p><details class="deep-dive"><summary>Deep dive: data races</summary><div><p>A data race occurs when goroutines access the same memory concurrently and at least one writes without synchronization. Prefer message passing/ownership, or protect shared state with a mutex. Run <code>go test -race ./...</code>.</p></div></details></section>
+
+<p class="section-label">Failure drills</p><h2>Reliability is demonstrated by interruption</h2><section class="lab"><ol><li>Kill the API after task/outbox commit; prove event publishes after restart.</li><li>Kill the publisher after publish but before marking sent; prove duplicate causes one consumer effect.</li><li>Run two publisher replicas; prove claims do not starve or double-process normal work.</li><li>Send a poison event; prove bounded retry and DLQ alert.</li><li>Stop the database temporarily; observe backoff rather than a hot loop.</li><li>Cancel the process under load; prove goroutines exit within the shutdown deadline.</li></ol></section>
+
+<section class="quiz"><h2>Knowledge check</h2><p><strong>1.</strong> Does the outbox give exactly-once delivery?</p><details class="answer"><summary>Show answer</summary><div>No. It prevents lost publication intent, but a crash around publish/mark-sent can duplicate delivery. Consumers still need idempotency.</div></details><p><strong>2.</strong> Why atomically write inbox and projection?</p><details class="answer"><summary>Show answer</summary><div>Otherwise the marker and effect can diverge, causing skipped work or duplicated effects after a crash.</div></details><p><strong>3.</strong> What is backpressure?</p><details class="answer"><summary>Show answer</summary><div>A mechanism that slows producers when consumers are at capacity, preventing unbounded memory/work growth.</div></details></section>
+<section class="readiness"><h2>Phase 9 readiness gate</h2><div class="checklist"><label class="check-item"><input type="checkbox" data-check="p9-1"><span>Domain state and outbox intent commit in one database transaction.</span></label><label class="check-item"><input type="checkbox" data-check="p9-2"><span>Consumers atomically deduplicate and apply effects.</span></label><label class="check-item"><input type="checkbox" data-check="p9-3"><span>Retries are classified, bounded, backoff with jitter, and lead to an owned DLQ process.</span></label><label class="check-item"><input type="checkbox" data-check="p9-4"><span>Worker pools have bounded channels, cancellation, and no detected data races.</span></label><label class="check-item"><input type="checkbox" data-check="p9-5"><span>Crash drills prove recovery at every ambiguous boundary.</span></label></div><p>Next: <span class="command">I'm done with Phase 9, start Phase 10 learning</span></p></section>
+<footer class="phase-footer"><a class="phase-link" href="../phase-08-nats-services/index.html">← Phase 8</a><a class="phase-link next" href="../phase-10-cel-policies/index.html">Phase 10: CEL policies →</a></footer></article></main></div><script src="../assets/course.js"></script></body></html>

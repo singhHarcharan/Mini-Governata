@@ -1,0 +1,56 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Phase 12 — Observability & Production Proof</title><link rel="stylesheet" href="../assets/course.css"></head><body data-root=".." data-phase="12"><div class="course-shell"><aside data-course-nav></aside><main class="course-main"><article class="article">
+<header class="phase-hero"><p class="eyebrow">Phase 12 · Operate what you built</p><h1>Package, observe, test, and explain the complete system</h1><p class="hero-lede">Add configuration validation, structured logs, Prometheus metrics, OpenTelemetry traces, health probes, Docker packaging, system tests, failure drills, and the final Governata source-reading challenge.</p><div class="hero-meta"><span class="pill">8–14 sessions</span><span class="pill">OpenTelemetry</span><span class="pill">Prometheus</span><span class="pill">Docker/Compose</span><span class="pill" data-phase-progress>Start when ready</span></div></header>
+<section class="callout teal"><h2>The final outcome</h2><p>You can run Mini Governata locally as a multi-service system, diagnose a failed request using correlation across logs/metrics/traces, recover from dependency failures, and map each architecture concept to Governata’s code.</p></section>
+
+<p class="section-label">Configuration</p><h2>Fail fast before serving traffic</h2><section class="lesson"><pre><code>type Config struct {
+    HTTPAddr    string
+    DatabaseURL string
+    NATSURL     string
+    LogLevel    string
+}
+
+func Load() (Config, error) {
+    cfg := Config{
+        HTTPAddr: envOr("HTTP_ADDR", ":8080"),
+        DatabaseURL: os.Getenv("DATABASE_URL"),
+        NATSURL: envOr("NATS_URL", "nats://nats:4222"),
+    }
+    if cfg.DatabaseURL == "" { return Config{}, errors.New("DATABASE_URL required") }
+    return cfg, nil
+}</code></pre><p>Parse once at startup, validate ranges and required values, and pass typed config to constructors. Secrets come from the runtime secret mechanism, never source or frontend builds. Log non-sensitive effective configuration so operation is explainable.</p></section>
+
+<p class="section-label">Three signals</p><h2>Logs tell stories, metrics show patterns, traces connect work</h2><section class="lesson"><table><thead><tr><th>Signal</th><th>Question</th><th>Example</th></tr></thead><tbody><tr><td>Structured log</td><td>What happened in this event?</td><td>request ID, tenant, route, status, duration, error category</td></tr><tr><td>Metric</td><td>How often/how much across the system?</td><td>request rate, errors, latency, queue lag</td></tr><tr><td>Trace</td><td>Where did one operation spend time?</td><td>React/API → Core → NATS → Governance → DB spans</td></tr></tbody></table><pre><code>logger.Info("request completed",
+    "request_id", requestID,
+    "method", c.Request.Method,
+    "route", c.FullPath(),
+    "status", c.Writer.Status(),
+    "duration_ms", time.Since(start).Milliseconds(),
+)</code></pre><p>Use structured fields rather than formatted prose. Never use raw user IDs, task IDs, URLs, or error strings as metric labels—the cardinality explosion harms the monitoring system.</p></section>
+
+<p class="section-label">Metrics</p><h2>Begin with RED and worker health</h2><section class="lesson"><ul><li><strong>Rate:</strong> requests/messages/jobs per second.</li><li><strong>Errors:</strong> failures by stable category.</li><li><strong>Duration:</strong> latency histograms by route template/operation.</li><li><strong>Saturation:</strong> DB pool usage, worker queue depth, consumer lag.</li><li><strong>Reliability:</strong> outbox oldest age, retry count, DLQ depth, projection lag.</li></ul><p>Prefer route templates such as <code>/tasks/:id</code>, not raw paths. Define alerts from user impact and sustained symptoms, not every single failure.</p></section>
+
+<p class="section-label">Tracing</p><h2>Propagate context across protocols</h2><section class="lesson"><div class="diagram"><div class="flow"><div class="flow-node"><strong>HTTP span</strong><br>trace context</div><div class="flow-arrow">→ inject →</div><div class="flow-node"><strong>NATS headers</strong></div><div class="flow-arrow">→ extract →</div><div class="flow-node"><strong>Consumer span</strong></div><div class="flow-arrow">→ child →</div><div class="flow-node"><strong>DB span</strong></div></div></div><p>Instrumentation creates spans around meaningful operations. Propagators inject trace context into outbound HTTP/message headers and extract it on receipt. Correlation IDs support business-level tracking; trace IDs support telemetry. They may overlap but are not identical concepts.</p><div class="callout warning">Sampling means not every trace is stored. Do not rely on traces as the audit record.</div></section>
+
+<p class="section-label">Health and lifecycle</p><h2>Alive is different from ready</h2><section class="lesson"><table><thead><tr><th>Probe</th><th>Meaning</th></tr></thead><tbody><tr><td>Liveness</td><td>Process is responsive; repeated failure may justify restart.</td></tr><tr><td>Readiness</td><td>Instance can accept useful traffic; dependencies/migrations/consumers are sufficiently ready.</td></tr><tr><td>Startup</td><td>Optional protection for slow initialization before liveness enforcement.</td></tr></tbody></table><p>On shutdown: mark not-ready, stop accepting work, cancel consumers/workers, drain within a deadline, flush telemetry, close clients. Shutdown must be bounded; perfection cannot hang deployment forever.</p></section>
+
+<p class="section-label">Containers</p><h2>Build reproducibly; run minimally</h2><section class="lesson"><pre><code>FROM golang:1.26 AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -trimpath -o /out/api ./cmd/api
+
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=build /out/api /api
+USER nonroot:nonroot
+ENTRYPOINT ["/api"]</code></pre><p>Pin versions/digests as your environment requires, run as non-root, keep secrets out of layers, and use multi-stage builds. In Compose, services reach each other by service DNS name, not <code>localhost</code>. A startup order is not readiness; clients still need retry/backoff.</p></section>
+
+<p class="section-label">Testing strategy</p><h2>Prove each risk at the cheapest faithful layer</h2><section class="lesson"><table><thead><tr><th>Layer</th><th>Proves</th></tr></thead><tbody><tr><td>Domain unit</td><td>transitions, deadlines, policy decisions</td></tr><tr><td>Adapter integration</td><td>SQL constraints/transactions, NATS semantics, object storage behavior</td></tr><tr><td>Contract</td><td>API/event schemas between producer and consumer</td></tr><tr><td>System/E2E</td><td>critical user journey across running services</td></tr><tr><td>Failure drill</td><td>recovery during real interruption/duplication/lag</td></tr></tbody></table><p>High coverage is not the goal; high confidence in costly failure modes is. Make tests deterministic with isolated tenants/data, fixed clocks, and bounded waits rather than arbitrary sleeps.</p></section>
+
+<p class="section-label">Capstone drill</p><h2>Diagnose one broken completion</h2><section class="lab"><ol><li>Start the complete-task action in React and note its request/correlation ID.</li><li>Find the API log and trace; locate time spent and status category.</li><li>Inspect the database transition/audit/outbox rows.</li><li>Follow the published event and Governance/Core consumer lag.</li><li>Check retry/DLQ and the affected projection.</li><li>Explain the root failure, user impact, safe recovery, and prevention signal.</li><li>Repeat the trace in real Governata and identify corresponding packages/configuration.</li></ol></section>
+
+<p class="section-label">Graduation map</p><h2>What you should now recognize in Governata</h2><section class="lesson"><div class="three-col"><div class="mini-card"><h3>Code structure</h3><p>packages, structs, receivers, interfaces, constructors, DTOs, handlers, services, repositories</p></div><div class="mini-card"><h3>Platform behavior</h3><p>Postgres/GORM, migrations, JWT/RBAC, workflows, NATS/JetStream, outbox, CEL, Redis, MinIO</p></div><div class="mini-card"><h3>Operations</h3><p>context cancellation, workers, logs, metrics, traces, probes, containers, failure recovery</p></div></div></section>
+
+<section class="quiz"><h2>Knowledge check</h2><p><strong>1.</strong> Why not use raw task ID as a metric label?</p><details class="answer"><summary>Show answer</summary><div>It creates unbounded unique time series (high cardinality), increasing cost and degrading metric storage/query performance.</div></details><p><strong>2.</strong> Why can readiness fail while liveness succeeds?</p><details class="answer"><summary>Show answer</summary><div>The process is alive but temporarily cannot serve useful traffic—perhaps DB connectivity, migration, or required consumer state is unavailable.</div></details><p><strong>3.</strong> What is your first cross-protocol navigation key?</p><details class="answer"><summary>Show answer</summary><div>Use request/correlation/trace identifiers at runtime; in source, use route paths, message subjects/event types, and composition wiring.</div></details></section>
+<section class="readiness"><h2>Course graduation gate</h2><div class="checklist"><label class="check-item"><input type="checkbox" data-check="p12-1"><span>Configuration validates before startup and secrets never enter source/frontend/images/logs.</span></label><label class="check-item"><input type="checkbox" data-check="p12-2"><span>Logs, bounded-cardinality metrics, and propagated traces explain critical flows.</span></label><label class="check-item"><input type="checkbox" data-check="p12-3"><span>Readiness/liveness and graceful shutdown match real service/worker dependencies.</span></label><label class="check-item"><input type="checkbox" data-check="p12-4"><span>Containers run reproducibly and minimally; Compose dependencies tolerate readiness delays.</span></label><label class="check-item"><input type="checkbox" data-check="p12-5"><span>Tests and failure drills prove domain, adapters, contracts, user journeys, and recovery.</span></label><label class="check-item"><input type="checkbox" data-check="p12-6"><span>I can independently trace a Governata feature across React, Go, database, messages, and observability.</span></label></div><p>Finish with: <span class="command">I'm done with Phase 12—give me the Governata graduation challenge</span></p></section>
+<footer class="phase-footer"><a class="phase-link" href="../phase-11-storage-workers/index.html">← Phase 11</a><a class="phase-link next" href="../index.html">Course home →</a></footer></article></main></div><script src="../assets/course.js"></script></body></html>

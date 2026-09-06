@@ -1,0 +1,109 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Phase 2 — Go Foundations</title><link rel="stylesheet" href="../assets/course.css"></head><body data-root=".." data-phase="2"><div class="course-shell"><aside data-course-nav></aside><main class="course-main"><article class="article">
+<header class="phase-hero"><p class="eyebrow">Phase 2 · First Go program</p><h1>Rebuild the task rules as a small Go CLI</h1><p class="hero-lede">Learn Go through a domain you already understand. No HTTP or database yet: input, task transitions, errors, and tests stay visible in one process.</p><div class="hero-meta"><span class="pill">5–8 sessions</span><span class="pill">Go standard library</span><span class="pill">Table-driven tests</span><span class="pill" data-phase-progress>Start when ready</span></div></header>
+<section class="callout"><h2>What you will build</h2><p>A command-line task tracker that creates, lists, starts, and completes governance tasks. It stores data in memory, rejects invalid transitions, prints useful errors, and has a test suite. This becomes the domain core of the HTTP API.</p></section>
+<div class="diagram"><div class="flow"><div class="flow-node"><strong>CLI input</strong><br>command + flags</div><div class="flow-arrow">→</div><div class="flow-node"><strong>Service</strong><br>use case</div><div class="flow-arrow">→</div><div class="flow-node"><strong>Task</strong><br>domain rule</div><div class="flow-arrow">→</div><div class="flow-node"><strong>Memory store</strong><br>current state</div></div><p class="diagram-caption">Keep the first Go program in one process so language concepts remain visible.</p></div>
+
+<p class="section-label">Toolchain</p><h2>Workspace, module, package, file</h2><section class="lesson"><pre><code>mini-governata/
+├── go.mod                 # this module's identity and dependencies
+├── cmd/taskcli/main.go    # executable composition root
+└── internal/task/
+    ├── task.go            # domain types + rules
+    ├── memory_store.go    # in-memory persistence
+    └── task_test.go</code></pre><table><thead><tr><th>Command</th><th>Meaning</th></tr></thead><tbody><tr><td><code>go mod init example/mini-governata</code></td><td>Create a module.</td></tr><tr><td><code>go fmt ./...</code></td><td>Canonical formatting.</td></tr><tr><td><code>go test ./...</code></td><td>Compile and test all packages.</td></tr><tr><td><code>go run ./cmd/taskcli</code></td><td>Build and run the CLI.</td></tr></tbody></table><p><code>go.work</code> can join multiple local modules without publishing them. Governata uses this idea so local module imports resolve together.</p></section>
+
+<p class="section-label">Types</p><h2>Make invalid ideas harder to express</h2><section class="lesson"><pre><code>type Status string
+
+const (
+    StatusPending    Status = "pending"
+    StatusInProgress Status = "in_progress"
+    StatusCompleted  Status = "completed"
+)
+
+type Task struct {
+    ID        string
+    Title     string
+    Status    Status
+    CreatedAt time.Time
+}</code></pre><p><code>Status</code> is a distinct named type, not a free-form string. Constants enumerate meaningful values. Go has no classes: a struct holds data; methods add behavior; packages group related code.</p><div class="react-bridge"><div class="bridge-side"><h4>TypeScript</h4><pre><code>type Status =
+  | 'pending'
+  | 'in_progress'
+  | 'completed'</code></pre></div><div class="bridge-arrow">↔</div><div class="bridge-side"><h4>Go</h4><pre><code>type Status string
+const StatusPending Status = "pending"</code></pre></div></div>
+<h3>Values, pointers, and mutation</h3><pre><code>func (t Task) Label() string {       // copy; reading is natural
+    return t.Title + " [" + string(t.Status) + "]"
+}
+
+func (t *Task) Complete() error {    // pointer; changes this task
+    if t.Status != StatusInProgress {
+        return ErrInvalidTransition
+    }
+    t.Status = StatusCompleted
+    return nil
+}</code></pre><p>Use a pointer receiver when mutating or when the struct is expensive to copy. Be consistent for a type. A pointer may be <code>nil</code>; a struct value has usable zero-valued fields.</p></section>
+
+<p class="section-label">Collections and control flow</p><h2>Read Go’s deliberately small language</h2><section class="lesson"><pre><code>tasks := []Task{}                    // slice
+byID := map[string]*Task{}           // map
+
+for _, task := range tasks {
+    if task.Status == StatusPending {
+        fmt.Println(task.Label())
+    }
+}
+
+switch command {
+case "list":
+    list(tasks)
+case "complete":
+    complete(byID[id])
+default:
+    return fmt.Errorf("unknown command %q", command)
+}</code></pre><p>A slice is a window over an underlying array; <code>append</code> may return a new slice header, so assign its result. Map lookup can return a second boolean: <code>task, ok := byID[id]</code>. Go has one loop keyword, <code>for</code>.</p><details class="deep-dive"><summary>Deep dive: slice aliasing</summary><div><p>Two slices may share an underlying array. Mutating an element can be visible through both. Appending can reallocate and break that sharing. Treat slices as small descriptors—not as immutable JavaScript arrays.</p></div></details></section>
+
+<p class="section-label">Errors</p><h2>Failures are explicit data</h2><section class="lesson"><pre><code>var ErrNotFound = errors.New("task not found")
+
+func (s *MemoryStore) Find(id string) (*Task, error) {
+    task, ok := s.tasks[id]
+    if !ok { return nil, fmt.Errorf("find task %s: %w", id, ErrNotFound) }
+    return task, nil
+}
+
+task, err := store.Find(id)
+if errors.Is(err, ErrNotFound) { /* expected category */ }
+if err != nil { /* unexpected failure */ }</code></pre><p>Wrap errors with <code>%w</code> to add operation context while preserving their identity for <code>errors.Is</code>. Avoid comparing error strings. Return errors; log them at a boundary that knows context, otherwise duplicate logs appear.</p><div class="callout warning"><strong><code>panic</code> is not ordinary error handling.</strong> Reserve it for truly unrecoverable programmer/startup conditions. User input, missing tasks, and invalid transitions return errors.</div></section>
+
+<p class="section-label">Interfaces</p><h2>Let consumers describe the capability they need</h2><section class="lesson"><pre><code>type Store interface {
+    Create(task Task) error
+    Find(id string) (*Task, error)
+    List() []Task
+}
+
+type Service struct { store Store }
+
+func NewService(store Store) *Service { return &amp;Service{store: store} }</code></pre><p>The service depends on behavior, not the map implementation. Interfaces are satisfied implicitly. Keep them small and define them close to the consuming package. Phase 4 will turn this into the full architecture.</p></section>
+
+<p class="section-label">Tests</p><h2>Use tables to prove rules, not lines</h2><section class="lesson"><pre><code>func TestTaskComplete(t *testing.T) {
+    tests := []struct {
+        name    string
+        initial Status
+        wantErr bool
+    }{
+        {"from in progress", StatusInProgress, false},
+        {"from pending", StatusPending, true},
+        {"already completed", StatusCompleted, true},
+    }
+
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            task := Task{Status: tt.initial}
+            err := task.Complete()
+            if (err != nil) != tt.wantErr { t.Fatalf("error = %v", err) }
+        })
+    }
+}</code></pre><p>Each row states a business example. Tests live in <code>*_test.go</code>, use <code>TestXxx</code>, and receive <code>*testing.T</code>. Run <code>go test -race ./...</code> when concurrency appears.</p></section>
+
+<section class="lab"><h2>Build sequence</h2><ol><li>Create the module and task package.</li><li>Define <code>Status</code>, <code>Task</code>, and sentinel errors.</li><li>Write transition tests before CLI wiring.</li><li>Create a <code>Store</code> interface and memory implementation.</li><li>Create a service for create/start/complete behavior.</li><li>Wire dependencies in <code>cmd/taskcli/main.go</code>.</li><li>Parse commands with <code>flag</code> or a simple REPL loop.</li><li>Format, test, run, and deliberately trigger every error.</li></ol></section>
+
+<section class="quiz"><h2>Knowledge check</h2><p><strong>1.</strong> Why must <code>append</code> be assigned?</p><details class="answer"><summary>Show answer</summary><div>It returns an updated slice header and may allocate a new underlying array; ignoring the return can lose the new length/storage.</div></details><p><strong>2.</strong> When use <code>*Task</code>?</p><details class="answer"><summary>Show answer</summary><div>When the function/method must mutate the same task, represent absence with nil, or avoid copying a substantial value. Do not use pointers automatically for every value.</div></details><p><strong>3.</strong> Why wrap with <code>%w</code>?</p><details class="answer"><summary>Show answer</summary><div>It adds useful operation context while allowing callers to recognize the original error using <code>errors.Is</code> or <code>errors.As</code>.</div></details></section>
+<section class="lesson"><h2>Common traps</h2><ul class="mistakes"><li>Writing Java-style getters, setters, and giant interfaces.</li><li>Ignoring returned errors or logging the same error in every layer.</li><li>Returning pointers to loop variables without understanding their lifetime/identity.</li><li>Using strings everywhere instead of small domain types.</li><li>Putting all code in <code>main.go</code>, making rules hard to test.</li></ul></section>
+<section class="readiness"><h2>Phase 2 readiness gate</h2><div class="checklist"><label class="check-item"><input type="checkbox" data-check="p2-1"><span>I can create a module, explain packages and visibility, format, run, and test it.</span></label><label class="check-item"><input type="checkbox" data-check="p2-2"><span>I can use structs, named types, methods, slices, maps, pointers, and zero values deliberately.</span></label><label class="check-item"><input type="checkbox" data-check="p2-3"><span>Task transitions return wrapped/recognizable errors rather than panic.</span></label><label class="check-item"><input type="checkbox" data-check="p2-4"><span>A narrow Store interface separates rules from in-memory persistence.</span></label><label class="check-item"><input type="checkbox" data-check="p2-5"><span>Table-driven tests prove every allowed and forbidden transition.</span></label></div><p>Next command: <span class="command">I'm done with Phase 2, start Phase 3 learning</span></p></section>
+<footer class="phase-footer"><a class="phase-link" href="../phase-01-frontend/index.html">← Phase 1</a><a class="phase-link next" href="../phase-03-go-api/index.html">Phase 3: Go HTTP API →</a></footer></article></main></div><script src="../assets/course.js"></script></body></html>

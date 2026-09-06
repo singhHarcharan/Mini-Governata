@@ -1,0 +1,66 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Phase 7 — Workflow, Audit & SLA</title><link rel="stylesheet" href="../assets/course.css"></head><body data-root=".." data-phase="7"><div class="course-shell"><aside data-course-nav></aside><main class="course-main"><article class="article">
+<header class="phase-hero"><p class="eyebrow">Phase 7 · Domain depth</p><h1>Turn task status into an auditable workflow</h1><p class="hero-lede">Model transitions as a state machine, record immutable evidence, calculate deadlines with an injected clock, and run an SLA monitor that starts and stops safely.</p><div class="hero-meta"><span class="pill">6–10 sessions</span><span class="pill">State machines</span><span class="pill">Audit trail</span><span class="pill">Time + workers</span><span class="pill" data-phase-progress>Start when ready</span></div></header>
+<section class="callout"><h2>What you will build</h2><p>Tasks have explicit transitions, assignees, due times, and append-only audit entries. A background monitor flags overdue tasks. The UI shows only allowed actions and renders a timeline, while the backend remains authoritative.</p></section>
+
+<p class="section-label">State machine</p><h2>Status is a graph, not a text field</h2><section class="lesson"><div class="diagram"><div class="flow"><div class="flow-node"><strong>pending</strong></div><div class="flow-arrow">start →</div><div class="flow-node"><strong>in_progress</strong></div><div class="flow-arrow">complete →</div><div class="flow-node"><strong>completed</strong></div></div><div class="flow" style="margin-top:10px"><div class="flow-node"><strong>pending</strong></div><div class="flow-arrow">cancel →</div><div class="flow-node"><strong>cancelled</strong></div></div></div><pre><code>var allowed = map[Status]map[Action]Status{
+    Pending:    {Start: InProgress, Cancel: Cancelled},
+    InProgress: {Complete: Completed, Cancel: Cancelled},
+}
+
+func (t *Task) Apply(action Action, actor string, now time.Time) error {
+    next, ok := allowed[t.Status][action]
+    if !ok { return fmt.Errorf("%w: %s from %s", ErrInvalidTransition, action, t.Status) }
+    if action == Complete &amp;&amp; actor != t.Assignee { return ErrNotAssignee }
+    t.Status, t.UpdatedAt = next, now
+    return nil
+}</code></pre><p>A transition is <em>current state + action + context → next state or error</em>. Centralize it so HTTP, workers, and messages cannot invent their own rules.</p></section>
+
+<p class="section-label">Audit</p><h2>Current state answers “what”; audit answers “how”</h2><section class="lesson"><pre><code>type AuditEntry struct {
+    ID         string
+    TenantID   string
+    ActorID    string
+    Action     string
+    EntityType string
+    EntityID   string
+    Before     map[string]any
+    After      map[string]any
+    OccurredAt time.Time
+    RequestID  string
+}</code></pre><p>Audit entries should be append-only, ordered, attributable, tenant-scoped, and created in the same database transaction as the state change. Redact secrets and minimize sensitive values; “audit everything” can become a privacy leak.</p><pre><code>return repo.WithTransaction(ctx, func(tx Tx) error {
+    task, err := tx.Tasks().FindForUpdate(ctx, tenantID, taskID)
+    if err != nil { return err }
+    before := task.Snapshot()
+    if err := task.Apply(Complete, actorID, clock.Now()); err != nil { return err }
+    if err := tx.Tasks().Save(ctx, task); err != nil { return err }
+    return tx.Audit().Append(ctx, NewAudit(actorID, before, task.Snapshot()))
+})</code></pre></section>
+
+<p class="section-label">Time</p><h2>Inject a clock so deadlines are testable</h2><section class="lesson"><pre><code>type Clock interface { Now() time.Time }
+
+func IsOverdue(task Task, now time.Time) bool {
+    return task.Status != Completed &amp;&amp; task.DueAt != nil &amp;&amp; now.After(*task.DueAt)
+}</code></pre><p>Passing or injecting time makes boundary tests deterministic. Store instants in UTC; format in the user’s zone at presentation time. Decide whether a deadline is inclusive and encode that decision in tests.</p><details class="deep-dive"><summary>Deep dive: duration versus calendar time</summary><div><p><code>24*time.Hour</code> means elapsed duration. “Next business day at 9:00” is a calendar rule involving location, weekends, and holidays. Do not confuse them.</p></div></details></section>
+
+<p class="section-label">SLA monitor</p><h2>A worker is a loop with a lifecycle</h2><section class="lesson"><pre><code>func (m *Monitor) Run(ctx context.Context) error {
+    ticker := time.NewTicker(m.interval)
+    defer ticker.Stop()
+    for {
+        select {
+        case &lt;-ctx.Done(): return ctx.Err()
+        case now := &lt;-ticker.C:
+            if err := m.checkOverdue(ctx, now); err != nil { m.log.Error("sla check", "err", err) }
+        }
+    }
+}</code></pre><p><code>select</code> waits for whichever channel is ready. Cancellation is a normal shutdown signal. One item failing should not silently kill the monitor; decide retry/reporting behavior explicitly. Multiple replicas require idempotency or work claiming so alerts are not duplicated.</p></section>
+
+<p class="section-label">Frontend projection</p><h2>Render allowed actions, but expect conflicts</h2><section class="lesson"><pre><code>const actionsByStatus: Record&lt;TaskStatus, TaskAction[]&gt; = {
+  pending: ['start', 'cancel'],
+  in_progress: ['complete', 'cancel'],
+  completed: [],
+  cancelled: [],
+}</code></pre><p>The UI map guides the user; it does not secure the transition. If another user changes the task, the server may return <code>409</code>. Refetch and explain the new state. Render the audit timeline from server entries rather than constructing history locally.</p></section>
+
+<section class="lab"><h2>Build sequence</h2><ol><li>Draw the complete transition graph and write a transition table.</li><li>Implement domain actions and table-driven tests.</li><li>Add audit migration/repository and atomic append.</li><li>Inject a fake clock and implement due/overdue rules.</li><li>Create a cancellable SLA monitor and idempotent notification marker.</li><li>Add allowed-action UI and 409 reconciliation.</li><li>Render a chronological audit timeline.</li><li>Test concurrency: two completion attempts produce one transition/audit.</li></ol></section>
+<section class="quiz"><h2>Knowledge check</h2><p><strong>1.</strong> Why save audit and state in one transaction?</p><details class="answer"><summary>Show answer</summary><div>Otherwise a crash can create state without evidence or evidence without state. Atomicity preserves their relationship.</div></details><p><strong>2.</strong> Why inject time?</p><details class="answer"><summary>Show answer</summary><div>Tests can control boundary instants exactly, and domain rules are not coupled to the wall clock.</div></details><p><strong>3.</strong> What should a worker do on cancellation?</p><details class="answer"><summary>Show answer</summary><div>Stop accepting/starting work, finish or abandon according to the defined deadline, clean resources, and return normally.</div></details></section>
+<section class="readiness"><h2>Phase 7 readiness gate</h2><div class="checklist"><label class="check-item"><input type="checkbox" data-check="p7-1"><span>A single transition table and domain method enforce every allowed action.</span></label><label class="check-item"><input type="checkbox" data-check="p7-2"><span>State changes and sanitized audit entries commit atomically.</span></label><label class="check-item"><input type="checkbox" data-check="p7-3"><span>Clock-driven deadline tests cover exact boundary behavior.</span></label><label class="check-item"><input type="checkbox" data-check="p7-4"><span>The SLA monitor obeys context cancellation and avoids duplicate effects.</span></label><label class="check-item"><input type="checkbox" data-check="p7-5"><span>The UI handles allowed actions, stale-state conflicts, and server audit history.</span></label></div><p>Next: <span class="command">I'm done with Phase 7, start Phase 8 learning</span></p></section>
+<footer class="phase-footer"><a class="phase-link" href="../phase-06-auth-tenancy/index.html">← Phase 6</a><a class="phase-link next" href="../phase-08-nats-services/index.html">Phase 8: NATS services →</a></footer></article></main></div><script src="../assets/course.js"></script></body></html>
